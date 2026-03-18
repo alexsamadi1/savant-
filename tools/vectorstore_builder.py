@@ -106,17 +106,21 @@ def rebuild_vectorstore_from_s3():
     Returns (doc_count, chunk_count)
     """
     import streamlit as st
+try:
+    from tools.s3_utils import get_secret
+except ImportError:
+    pass
     print("🔄 Starting full vectorstore rebuild from S3...")
 
     try:
         s3 = boto3.client(
             "s3",
-            aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
-            region_name=st.secrets["AWS_REGION"]
+            aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
+            region_name=get_secret("AWS_REGION")
         )
-        docs_bucket = st.secrets["S3_DOCS_BUCKET"]
-        index_bucket = st.secrets["S3_INDEX_BUCKET"]
+        docs_bucket = get_secret("S3_DOCS_BUCKET")
+        index_bucket = get_secret("S3_INDEX_BUCKET")
     except Exception as e:
         print(f"❌ Could not connect to S3: {e}")
         return 0, 0
@@ -212,18 +216,22 @@ def rebuild_vectorstore_enriched():
     Returns (doc_count, chunk_count)
     """
     import streamlit as st
+try:
+    from tools.s3_utils import get_secret
+except ImportError:
+    pass
     from tools.loaders import enrich_pdf_chunks, chunk_docx_with_metadata
     print("🔄 Starting enriched vectorstore rebuild...")
 
     try:
         s3 = boto3.client(
             "s3",
-            aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
-            region_name=st.secrets["AWS_REGION"]
+            aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
+            region_name=get_secret("AWS_REGION")
         )
-        docs_bucket = st.secrets["S3_DOCS_BUCKET"]
-        index_bucket = st.secrets["S3_INDEX_BUCKET"]
+        docs_bucket = get_secret("S3_DOCS_BUCKET")
+        index_bucket = get_secret("S3_INDEX_BUCKET")
     except Exception as e:
         print(f"❌ Could not connect to S3: {e}")
         return 0, 0

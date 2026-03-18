@@ -2,10 +2,14 @@ import csv
 from datetime import datetime
 import os
 import streamlit as st
+try:
+    from tools.s3_utils import get_secret
+except ImportError:
+    pass
 from tools.s3_utils import download_file_from_s3, upload_file_to_s3
 
 LOG_FILE = "query_logs.csv"
-S3_BUCKET = st.secrets["S3_DOCS_BUCKET"]
+S3_BUCKET = get_secret("S3_DOCS_BUCKET")
 S3_KEY = f"logs/{LOG_FILE}"
 
 def ensure_log_file_exists():

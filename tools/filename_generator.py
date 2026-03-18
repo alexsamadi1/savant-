@@ -1,9 +1,13 @@
 import re
 from openai import OpenAI
 import streamlit as st
+try:
+    from tools.s3_utils import get_secret
+except ImportError:
+    pass
 from docx import Document
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
 
 def generate_smart_filename(document_text: str, original_name: str = "") -> str:
     messages = [

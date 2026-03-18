@@ -1,4 +1,8 @@
 import streamlit as st
+try:
+    from tools.s3_utils import get_secret
+except ImportError:
+    pass
 import pandas as pd
 import collections
 import re
@@ -71,11 +75,11 @@ def show_documents_panel():
     try:
         s3 = boto3.client(
             "s3",
-            aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
-            region_name=st.secrets["AWS_REGION"]
+            aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
+            region_name=get_secret("AWS_REGION")
         )
-        bucket = st.secrets["S3_DOCS_BUCKET"]
+        bucket = get_secret("S3_DOCS_BUCKET")
         response = s3.list_objects_v2(Bucket=bucket)
 
         if "Contents" not in response:
