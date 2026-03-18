@@ -1,0 +1,1 @@
+INDEX_PATH = "faiss_index_hr"

@@ -1,0 +1,28 @@
+# Core dependencies
+streamlit==1.45.1
+openai==1.79.0
+faiss-cpu
+pypdf==3.17.4
+
+# LangChain (stable, compatible)
+langchain==0.1.14
+langchain-openai==0.0.6
+langchain-community==0.0.35
+
+# Utilities
+tiktoken==0.9.0
+pydantic==2.11.4
+pydantic-settings==2.9.1
+pydantic_core==2.33.2
+python-dotenv
+rich
+unstructured==0.11.0
+python-docx
+nltk
+boto3
+watchdog
+python-docx
+
+# Analytics + Plotting
+pandas
+matplotlib

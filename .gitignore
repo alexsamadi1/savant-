@@ -1,0 +1,38 @@
+# --- Python virtual environments ---
+venv/
+
+# --- Environment and secrets ---
+.env
+.streamlit/secrets.toml
+
+# --- FAISS vectorstores ---
+faiss_index/
+faiss_index_hr/
+faiss_index_hr_combined/
+
+# --- Python bytecode ---
+__pycache__/
+*.py[cod]
+*.pyo
+
+# --- macOS system files ---
+.DS_Store
+
+# --- VS Code workspace ---
+.vscode/
+*.code-workspace
+
+# --- Query logs ---
+query_logs.csvvenv/
+test_chat.py
+docs/*.pdf
+docs/*.docx
+query_logs.csv
+rebuild_clean.py
+test_*.py
+docs/*.pdf
+docs/*.docx
+query_logs.csv
+rebuild_clean.py
+test_*.py
+faiss_index/

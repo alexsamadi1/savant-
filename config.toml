@@ -1,0 +1,32 @@
+[brand]
+app_name = "InnoAsk"
+page_icon = "📘"
+logo_path = "assets/innovim_vector.png"
+sidebar_title = "InnoAsk HR Assistant"
+sidebar_caption = "Quick answers to your HR questions."
+footer_text = "Internal use only • v1.0 • Updated June 2025"
+primary_color = "#1B4F72"
+
+[contact]
+hr_email = "mkramer@innovim.com"
+feedback_url = "https://docs.google.com/forms/d/e/1FAIpQLSc31lOd_KRn9mpffhQNwuthyzh1b3KTSeMGpb12hdJQ5IT_hQ/viewform?usp=dialog"
+
+[onboarding]
+role_question = "What's your role at Innovim?"
+tenure_question = "How long have you been with Innovim?"
+role_options = ["Program Manager", "General Staff"]
+tenure_options = ["New Hire (0–30 days)", "1–6 Months", "6+ Months", "2+ Years"]
+
+[assistant]
+welcome_message = "Hi there! I'm your HR Assistant. You can ask me anything about:"
+topics = ["Time tracking", "Vacation / PTO", "Remote work", "Benefits & forms"]
+sample_questions = [
+    "How many vacation days do I get?",
+    "What's the policy on remote work?",
+    "How do I update my benefits info?"
+]
+fallback_message = "I couldn't find a strong match in the documents. Please try rephrasing or contact HR."
+chat_placeholder = "Ask me anything—try 'What's the policy on remote work?'"
+
+[storage]
+s3_docs_bucket = "innovim-hr-docs-1"
