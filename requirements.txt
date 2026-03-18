@@ -1,12 +1,13 @@
 streamlit==1.45.1
 openai==1.79.0
-faiss-cpu==1.7.4
+faiss-cpu==1.13.2
 pypdf==3.17.4
 langchain==0.1.14
 langchain-openai==0.0.6
 langchain-community==0.0.35
 tiktoken==0.5.2
 pydantic==2.5.3
+pydantic-settings==2.1.0
 python-dotenv
 boto3
 pandas
@@ -15,3 +16,4 @@ python-docx
 nltk
 toml
 unstructured==0.11.0
+watchdog
