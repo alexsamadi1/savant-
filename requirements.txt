@@ -2,12 +2,10 @@ streamlit
 openai
 faiss-cpu
 pypdf
-langchain==0.1.14
-langchain-openai==0.0.6
-langchain-community==0.0.35
-tiktoken
+langchain==0.2.16
+langchain-openai==0.1.23
+langchain-community==0.2.16
 pydantic
-pydantic-settings
 python-dotenv
 boto3
 pandas
