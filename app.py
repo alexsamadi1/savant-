@@ -1,7 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 from tools.embeddings import load_faiss_vectorstore
-from tools.s3_utils import get_secret,
+from tools.s3_utils import get_secret
 from tools.s3_utils import upload_file_to_s3
 from tools.vectorstore_builder import rebuild_vectorstore_from_s3, get_relevant_chunks
 from tools.log_utils import ensure_log_file_exists, log_chat_interaction
