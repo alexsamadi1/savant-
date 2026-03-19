@@ -106,7 +106,10 @@ def rebuild_vectorstore_from_s3():
     Returns (doc_count, chunk_count)
     """
     import streamlit as st
+<<<<<<< Updated upstream:vectorstore_builder.py
     print("🔄 Starting full vectorstore rebuild from S3...")
+=======
+>>>>>>> Stashed changes:tools/vectorstore_builder.py
 
     try:
         s3 = boto3.client(
@@ -212,7 +215,10 @@ def rebuild_vectorstore_enriched():
     Returns (doc_count, chunk_count)
     """
     import streamlit as st
+<<<<<<< Updated upstream:vectorstore_builder.py
     from tools.loaders import enrich_pdf_chunks, chunk_docx_with_metadata
+=======
+>>>>>>> Stashed changes:tools/vectorstore_builder.py
     print("🔄 Starting enriched vectorstore rebuild...")
 
     try:
