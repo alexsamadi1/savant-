@@ -3,14 +3,16 @@ import os
 from pathlib import Path
 
 def get_secret(key: str) -> str:
+    # Try environment variables first (Railway)
+    value = os.environ.get(key)
+    if value:
+        return value
+    # Fall back to Streamlit secrets
     try:
         import streamlit as st
         return st.secrets[key]
     except Exception:
-        value = os.environ.get(key)
-        if not value:
-            raise ValueError(f"Secret '{key}' not found")
-        return value
+        raise ValueError(f"Secret '{key}' not found in environment or Streamlit secrets")
 
 def get_s3_client():
     return boto3.client(

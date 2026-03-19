@@ -1,3 +1,4 @@
+import os
 from tools.s3_utils import get_secret
 import streamlit as st
 from openai import OpenAI
@@ -135,7 +136,7 @@ def get_vectorstore():
 vectorstore = get_vectorstore()
 
 # --- OpenAI Client ---
-client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY") or get_secret("OPENAI_API_KEY"))
 
 # --- Chat History ---
 if "chat_history" not in st.session_state:
