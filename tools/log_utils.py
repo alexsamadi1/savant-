@@ -1,25 +1,22 @@
-from tools.s3_utils import get_secret
 import csv
 from datetime import datetime
 import os
-import streamlit as st
-from tools.s3_utils import download_file_from_s3, upload_file_to_s3
+from tools.s3_utils import download_file_from_s3, upload_file_to_s3, get_secret
 
 LOG_FILE = "query_logs.csv"
-S3_BUCKET = get_secret("S3_DOCS_BUCKET")
 S3_KEY = f"logs/{LOG_FILE}"
 
 def ensure_log_file_exists():
     if not os.path.exists(LOG_FILE):
         try:
-            download_file_from_s3(S3_KEY, S3_BUCKET)
+            s3_bucket = get_secret("S3_DOCS_BUCKET")
+            download_file_from_s3(S3_KEY, s3_bucket)
             print(f"[LOG] Pulled {LOG_FILE} from S3")
         except Exception as e:
             print(f"[LOG] No existing log on S3 or error downloading: {e}")
         else:
             return
 
-    # If file still doesn't exist, create it with headers
     if not os.path.exists(LOG_FILE):
         with open(LOG_FILE, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -38,15 +35,15 @@ def log_query_to_csv(
     source_docs: list = None,
     feedback: str = ""
 ):
+    import streamlit as st
     ensure_log_file_exists()
+    s3_bucket = get_secret("S3_DOCS_BUCKET")
 
     session_id = st.session_state.get("session_id")
     if not session_id:
         import uuid
         session_id = str(uuid.uuid4())
         st.session_state.session_id = session_id
-
-    doc_string = ", ".join(source_docs) if source_docs else ""
 
     row = [
         datetime.now().isoformat(),
@@ -67,7 +64,7 @@ def log_query_to_csv(
             writer.writerow(row)
 
         with open(LOG_FILE, "rb") as f:
-            upload_file_to_s3(f, S3_KEY, S3_BUCKET)
+            upload_file_to_s3(f, S3_KEY, s3_bucket)
         print("[LOG] Uploaded updated log to S3.")
     except Exception as e:
         print(f"[LOG] Logging failed: {e}")
@@ -81,7 +78,6 @@ def log_chat_interaction(
     response_type="direct",
     feedback=""
 ):
-    """Convenience wrapper to simplify logging full chat interaction."""
     log_query_to_csv(
         question=user_input,
         response=answer,
