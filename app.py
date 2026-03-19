@@ -1,3 +1,4 @@
+from tools.s3_utils import get_secret
 import streamlit as st
 from openai import OpenAI
 from tools.embeddings import load_faiss_vectorstore
@@ -126,7 +127,7 @@ if st.session_state.get("show_analytics", False):
 @st.cache_resource(show_spinner="🔍 Loading knowledge base...")
 def get_vectorstore():
     try:
-        return load_faiss_vectorstore("index", st.secrets["OPENAI_API_KEY"])
+        return load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
     except Exception as e:
         st.warning(f"⚠️ Couldn't load vectorstore from S3. Rebuilding... ({e})")
         return rebuild_vectorstore_from_s3()
@@ -134,7 +135,7 @@ def get_vectorstore():
 vectorstore = get_vectorstore()
 
 # --- OpenAI Client ---
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
 
 # --- Chat History ---
 if "chat_history" not in st.session_state:
@@ -162,7 +163,7 @@ if "role" in profile and "tenure" in profile:
 
         with st.expander("🔒 Admin Tools"):
             admin_code = st.text_input("Admin code", type="password")
-            if admin_code == st.secrets["ADMIN_CODE"]:
+            if admin_code == get_secret("ADMIN_CODE"):
                 st.session_state.is_admin = True
                 st.success("Admin access granted")
 
@@ -173,7 +174,7 @@ if "role" in profile and "tenure" in profile:
                         try:
                             raw_text = extract_text_from_docx(uploaded_file) if uploaded_file.name.endswith(".docx") else ""
                             smart_filename = generate_smart_filename(raw_text, uploaded_file.name)
-                            upload_file_to_s3(BytesIO(uploaded_file.getbuffer()), smart_filename, st.secrets["S3_DOCS_BUCKET"])
+                            upload_file_to_s3(BytesIO(uploaded_file.getbuffer()), smart_filename, get_secret("S3_DOCS_BUCKET"))
                             st.success(f"Uploaded as `{smart_filename}`")
 
                             with st.spinner("Rebuilding knowledge base... this takes 1-2 minutes"):
