@@ -1,12 +1,14 @@
-from tools.s3_utils import get_secret
 import re
 from openai import OpenAI
 import streamlit as st
 from docx import Document
+from tools.s3_utils import get_secret
 
-client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
+def get_client():
+    return OpenAI(api_key=get_secret("OPENAI_API_KEY"))
 
 def generate_smart_filename(document_text: str, original_name: str = "") -> str:
+    client = get_client()
     messages = [
         {
             "role": "system",
@@ -34,7 +36,7 @@ def generate_smart_filename(document_text: str, original_name: str = "") -> str:
         print(f"[Filename GPT Error] {e}")
         fallback = original_name.replace(" ", "_").lower() or "uploaded_file"
         return f"{fallback}.docx"
-    
+
 def extract_text_from_docx(file) -> str:
     doc = Document(file)
     return "\n".join([para.text for para in doc.paragraphs])
