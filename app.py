@@ -282,9 +282,7 @@ if "role" in profile and "tenure" in profile:
         try:
             logo_path = brand.get("logo_path", "")
             if logo_path and Path(logo_path).exists():
-                with open(logo_path, "r") as f:
-                    svg_content = f.read()
-                st.markdown(f'<div style="margin-bottom: 12px; width: 140px">{svg_content}</div>', unsafe_allow_html=True)
+                st.image(logo_path, width=140)
         except Exception:
             pass
         st.markdown(f"### {brand['sidebar_title']}")
