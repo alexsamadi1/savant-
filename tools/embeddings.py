@@ -15,8 +15,9 @@ def get_openai_api_key():
 
 # --- Load Vectorstore ---
 def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
-    import boto3, toml, botocore
+    import boto3, botocore
     from pathlib import Path
+    from tools.s3_utils import get_secret
 
     path = Path(index_dir)
     faiss_file = path / "index.faiss"
@@ -27,14 +28,13 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
     # Try loading from S3 first
     try:
         print("☁️ Attempting to load FAISS index from S3...")
-        secrets = toml.load(".streamlit/secrets.toml")
         s3 = boto3.client(
             "s3",
-            aws_access_key_id=secrets["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=secrets["AWS_SECRET_ACCESS_KEY"],
-            region_name=secrets["AWS_REGION"]
+            aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
+            region_name=get_secret("AWS_REGION")
         )
-        bucket = secrets["S3_INDEX_BUCKET"]
+        bucket = get_secret("S3_INDEX_BUCKET")
         s3.download_file(bucket, "index.faiss", str(faiss_file))
         s3.download_file(bucket, "index.pkl", str(pkl_file))
         print("✅ Successfully loaded FAISS index from S3")

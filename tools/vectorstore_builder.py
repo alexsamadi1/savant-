@@ -9,6 +9,7 @@ import tempfile
 import boto3
 import json
 import hashlib
+from tools.s3_utils import get_secret
 
 # --- Load API Key ---
 def get_openai_api_key():
