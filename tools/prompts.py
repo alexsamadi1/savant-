@@ -16,9 +16,9 @@ def build_prompt(query: str, documents: list, role: str = None, tenure: str = No
     if role and tenure:
         user_context = f"The user is a {role} who has been with {company_name} for {tenure}.\n"
 
-    return f"""You are a {company_name} HR assistant. {user_context}Use only the following context from the official {company_name} Employee Handbook and Orientation Guide to answer.
+    return f"""You are a {company_name} knowledge assistant. {user_context}Use only the following context from the official {company_name} internal documentation to answer.
 
-If the answer is not clearly in the provided context, respond with: "I couldn't find that in the handbook. Please check with HR."
+If the answer is not clearly in the provided context, respond with: "I couldn't find that in the documentation. Please check with your administrator."
 
 Context:
 {context}

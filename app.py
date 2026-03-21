@@ -155,8 +155,8 @@ if "role" in profile and "tenure" in profile:
         st.caption(f"_{brand['sidebar_caption']}_")
 
         with st.expander("ℹ️ How to Use & Support", expanded=False):
-            st.markdown("- Ask clear HR-related questions")
-            st.markdown("- Answers come from official company documents")
+            st.markdown("- Ask clear, specific questions")
+            st.markdown("- Answers come from your organization's internal documents")
             st.markdown("- Every answer shows its source")
             st.markdown("---")
             st.markdown(f"[📨 Contact HR](mailto:{contact['hr_email']})")
@@ -201,7 +201,7 @@ if "role" in profile and "tenure" in profile:
 
 # --- Main Header ---
 st.markdown(f"<h1 style='text-align: center;'>{brand['app_name']} Assistant</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>Your go-to assistant for HR policies, benefits, and employee questions.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>Your go-to assistant for institutional knowledge, policies, and procedures.</p>", unsafe_allow_html=True)
 
 # --- Sample Questions ---
 examples = assistant["sample_questions"]

@@ -63,9 +63,9 @@ def summarize_fallback(query, chunks: List[Document], client: OpenAI) -> str:
         {
             "role": "system",
             "content": (
-                f"You are a helpful assistant trained on {get_config()['brand']['company_name']}'s employee handbook and onboarding documents. "
-                "Summarize a cautious answer using the text provided. If unclear, advise contacting HR. "
-                "Never fabricate company-specific policies."
+                f"You are a helpful knowledge assistant trained on {get_config()['brand']['company_name']}'s internal documentation. "
+                "Summarize a cautious answer using the text provided. If unclear, advise the user to contact their administrator. "
+                "Never fabricate organization-specific policies."
             )
         },
         {
@@ -78,7 +78,7 @@ def summarize_fallback(query, chunks: List[Document], client: OpenAI) -> str:
         response = client.chat.completions.create(model="gpt-3.5-turbo", messages=messages)
         return response.choices[0].message.content.strip()
     except Exception:
-        return "I'm not confident I can answer that directly. Please check the handbook or contact HR for guidance."
+        return "I'm not confident I can answer that directly. Please check the source documentation or contact your administrator for guidance."
 
 # --- Answer Revision ---
 def revise_answer_with_gpt(question, draft_answer, client: OpenAI) -> str:
@@ -86,7 +86,7 @@ def revise_answer_with_gpt(question, draft_answer, client: OpenAI) -> str:
         {
             "role": "system",
             "content": (
-                "You are editing a draft HR answer for clarity and tone.\n\n"
+                "You are editing a draft answer for clarity and tone.\n\n"
                 "CRITICAL RULES:\n"
                 "1. You MUST preserve all specific facts, numbers, dates, and policies from the draft\n"
                 "2. Do NOT add any information that is not in the draft\n"
@@ -94,7 +94,7 @@ def revise_answer_with_gpt(question, draft_answer, client: OpenAI) -> str:
                 "4. Only improve the clarity, tone, and readability\n"
                 "5. Never start with a greeting like 'Hi there' or 'Hello'\n"
                 "6. Never refer to the company by name — use 'your company' or 'the organization'\n"
-                "7. If the draft says 15 PTO days, the final answer must say 15 PTO days\n"
+                "7. If the draft states a specific fact or number, the final answer must preserve it exactly\n"
                 "8. Keep the same length — do not expand or summarize drastically"
             )
         },
@@ -139,10 +139,10 @@ def generate_response(
 
     if reranked:
         system_prompt = (
-            f"You are {get_config()[‘brand’][‘company_name’]}’s professional HR assistant. The user is a {user_profile[‘role’]} "
-            f"with {user_profile[‘tenure’]} at the company.\n\n"
-            "Your job is to clearly answer the user's HR question using the excerpt provided. "
-            "If you're unsure, advise the user to contact HR."
+            f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {user_profile['role']} "
+            f"with {user_profile['tenure']} at the company.\n\n"
+            "Your job is to clearly answer the user's question using the excerpt from internal documentation provided. "
+            "If you're unsure, advise the user to contact their administrator."
         )
         messages = [
             {"role": "system", "content": system_prompt},
@@ -152,7 +152,7 @@ def generate_response(
         fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in chunks])
         messages = [
             {"role": "system", "content": (
-                f"You are a helpful HR assistant trained on {get_config()[‘brand’][‘company_name’]} documents. The question wasn’t answered clearly by any one excerpt, "
+                f"You are a helpful knowledge assistant trained on {get_config()['brand']['company_name']} internal documentation. The question wasn't answered clearly by any one excerpt, "
                 "but here are some partial chunks. Summarize a helpful answer based on what you can."
             )},
             {"role": "user", "content": f"User question: {query}\n\nContext snippets:\n{fallback_context}"}
@@ -196,10 +196,10 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
             {
                 "role": "system",
                 "content": (
-                    f"You are a helpful HR assistant trained on {get_config()[‘brand’][‘company_name’]} documents. "
-                    "The question wasn’t answered clearly by any one excerpt, but here are some partial chunks. "
+                    f"You are a helpful knowledge assistant trained on {get_config()['brand']['company_name']} internal documentation. "
+                    "The question wasn't answered clearly by any one excerpt, but here are some partial chunks. "
                     "Summarize a helpful answer based on what you can.\n"
-                    "If unsure, advise the user to contact HR."
+                    "If unsure, advise the user to contact their administrator."
                 )
             },
             {
@@ -219,10 +219,10 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
             {
                 "role": "system",
                 "content": (
-                    f"You are {get_config()[‘brand’][‘company_name’]}’s professional HR assistant. The user is a {role} "
+                    f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {role} "
                     f"with {tenure} at the company.\n\n"
-                    "Your job is to clearly answer the user's HR question using the excerpt provided. "
-                    "Be helpful and professional. If you're unsure, advise the user to contact HR."
+                    "Your job is to clearly answer the user's question using the excerpt from internal documentation provided. "
+                    "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
                 )
             },
             {
@@ -247,7 +247,7 @@ def suggest_follow_ups(user_question, answer, client: OpenAI) -> list:
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a helpful HR assistant."},
+                {"role": "system", "content": "You are a helpful knowledge assistant."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7
