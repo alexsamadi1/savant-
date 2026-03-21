@@ -47,48 +47,179 @@ if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
 # --- Global CSS ---
-st.markdown(f"""
+st.markdown("""
 <style>
-.chat-bubble {{
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+html, body, [class*="css"] {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+.main .block-container {
+  background-color: #0a0a0f;
+  color: #e0e0e0;
+}
+
+.main .block-container {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  max-width: 860px;
+}
+
+[data-testid="stSidebar"] {
+  background-color: #111118;
+  border-right: 1px solid #1e1e2e;
+}
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] div {
+  color: #e0e0e0;
+}
+[data-testid="stSidebar"] .stCaption {
+  color: #666 !important;
+}
+
+.chat-bubble {
   margin: 0.5rem 0;
-  padding: 0.75rem 1rem;
-  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 18px;
   display: inline-block;
   max-width: 90%;
-  line-height: 1.5;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}}
-.user-bubble {{
-  background-color: {brand["primary_color"]};
+  line-height: 1.6;
+  transition: all 0.2s ease;
+}
+.user-bubble {
+  background-color: #6C63FF;
   color: #ffffff;
   align-self: flex-end;
-}}
-.bot-bubble {{
-  background-color: #F0F4F8;
-  color: #0B1724;
+  box-shadow: 0 0 18px rgba(108, 99, 255, 0.35);
+}
+.bot-bubble {
+  background-color: #1a1a2e;
+  color: #e0e0e0;
   align-self: flex-start;
-}}
-.citation-chip {{
+  border-left: 3px solid #6C63FF;
+}
+
+.citation-chip {
   display: inline-block;
   font-size: 0.75rem;
-  background-color: #EAF3DE;
-  color: #27500A;
-  border: 1px solid #C0DD97;
+  background-color: #1a1a2e;
+  color: #a78bfa;
+  border: 1px solid #6C63FF;
   border-radius: 20px;
   padding: 2px 10px;
   margin-top: 6px;
-}}
-.dots {{ display: inline-block; width: 1em; text-align: left; }}
-.dots::after {{
+}
+
+[data-testid="stButton"] button {
+  background-color: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #6C63FF;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+[data-testid="stButton"] button:hover {
+  background-color: #6C63FF;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(108, 99, 255, 0.5);
+  border-color: #6C63FF;
+}
+
+[data-testid="stChatInput"] textarea {
+  background-color: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #2e2e4e;
+  border-radius: 12px;
+}
+[data-testid="stChatInput"] textarea:focus {
+  border-color: #6C63FF;
+  box-shadow: 0 0 10px rgba(108, 99, 255, 0.2);
+}
+
+/* Onboarding heading */
+.onboarding-heading {
+  text-align: center;
+  background: linear-gradient(90deg, #6C63FF, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+
+/* Radio options — dark pill style */
+div[role="radiogroup"] label {
+  background-color: #0f0f1a !important;
+  border: 1px solid #2e2e4e !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 1rem !important;
+  margin: 0.2rem 0 !important;
+  color: #e0e0e0 !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+}
+div[role="radiogroup"] label:hover {
+  border-color: #6C63FF !important;
+}
+div[role="radiogroup"] label:has(input:checked) {
+  border-color: #6C63FF !important;
+  background-color: rgba(108, 99, 255, 0.15) !important;
+}
+
+/* Primary button — Continue */
+button[data-testid="baseButton-primary"] {
+  background-color: #6C63FF !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  font-size: 1rem !important;
+  box-shadow: 0 0 20px rgba(108, 99, 255, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+button[data-testid="baseButton-primary"]:hover {
+  background-color: #5a52e0 !important;
+  box-shadow: 0 0 28px rgba(108, 99, 255, 0.55) !important;
+}
+
+/* Chat input placeholder */
+[data-testid="stChatInput"] textarea::placeholder {
+  color: #555 !important;
+}
+
+/* Sample questions expander */
+[data-testid="stExpander"] {
+  border: 1px solid #2e2e4e !important;
+  border-radius: 10px !important;
+  background-color: #0f0f1a !important;
+}
+[data-testid="stExpander"] summary {
+  color: #c0c0c0 !important;
+}
+[data-testid="stExpander"] summary:hover {
+  color: #a78bfa !important;
+}
+
+.dots { display: inline-block; width: 1em; text-align: left; }
+.dots::after {
   content: '...';
   animation: dotsAnim 1.5s steps(3, end) infinite;
-}}
-@keyframes dotsAnim {{
-  0%   {{ content: ''; }}
-  33%  {{ content: '.'; }}
-  66%  {{ content: '..'; }}
-  100% {{ content: '...'; }}
-}}
+}
+@keyframes dotsAnim {
+  0%   { content: ''; }
+  33%  { content: '.'; }
+  66%  { content: '..'; }
+  100% { content: '...'; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,7 +230,10 @@ if "user_profile" not in st.session_state:
 profile = st.session_state.user_profile
 
 if "role" not in profile or "tenure" not in profile:
-    st.markdown("## 👋 Welcome! Let's get to know you first")
+    st.markdown(
+        "<h2 class='onboarding-heading'>👋 Welcome! Let's get to know you first</h2>",
+        unsafe_allow_html=True
+    )
 
     st.session_state.role_selection = st.radio(
         onboarding["role_question"],
@@ -112,7 +246,7 @@ if "role" not in profile or "tenure" not in profile:
         key="tenure_radio"
     )
 
-    if st.button("✅ Continue"):
+    if st.button("✅ Continue", type="primary", use_container_width=True):
         profile["role"] = st.session_state.role_selection
         profile["tenure"] = st.session_state.tenure_selection
         st.success("You're all set! You can now start asking questions below 👇")
@@ -145,7 +279,11 @@ if "chat_history" not in st.session_state:
 # --- Sidebar ---
 if "role" in profile and "tenure" in profile:
     with st.sidebar:
-        st.image(brand["logo_path"], use_container_width=True)
+        try:
+            if Path(brand["logo_path"]).exists():
+                st.markdown(f'<img src="{brand["logo_path"]}" width="140">', unsafe_allow_html=True)
+        except Exception:
+            pass
         st.markdown(f"### {brand['sidebar_title']}")
 
         role = profile.get("role", "Unknown Role")
@@ -159,7 +297,6 @@ if "role" in profile and "tenure" in profile:
             st.markdown("- Answers come from your organization's internal documents")
             st.markdown("- Every answer shows its source")
             st.markdown("---")
-            st.markdown(f"[📨 Contact HR](mailto:{contact['hr_email']})")
             st.markdown(f"[📣 Submit Feedback]({contact['feedback_url']})")
 
         with st.expander("🔒 Admin Tools"):
@@ -195,13 +332,13 @@ if "role" in profile and "tenure" in profile:
                     st.session_state.show_analytics = True
 
         st.markdown(
-            f"<div style='font-size: 0.75rem; color: gray; margin-top: 1rem;'>{brand['footer_text']}</div>",
+            f"<div style='font-size: 0.7rem; color: #444; margin-top: 1.5rem; letter-spacing: 0.03em;'>{brand['footer_text']}</div>",
             unsafe_allow_html=True
         )
 
 # --- Main Header ---
-st.markdown(f"<h1 style='text-align: center;'>{brand['app_name']} Assistant</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>Your go-to assistant for institutional knowledge, policies, and procedures.</p>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='text-align: center; background: linear-gradient(90deg, #6C63FF, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-family: Inter, sans-serif; font-weight: 700;'>{brand['app_name']} Assistant</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #888; font-size: 1rem;'>Your go-to assistant for institutional knowledge, policies, and procedures.</p>", unsafe_allow_html=True)
 
 # --- Sample Questions ---
 examples = assistant["sample_questions"]

@@ -5,7 +5,7 @@ page_icon = "📘"
 logo_path = "assets/logo.png"
 sidebar_title = "Savant Assistant"
 sidebar_caption = "Quick answers from your organization's knowledge base."
-footer_text = "Internal use only • v1.0 • Updated June 2025"
+footer_text = "Savant • v1.0 • Powered by AI"
 primary_color = "#1B4F72"
 
 [contact]
