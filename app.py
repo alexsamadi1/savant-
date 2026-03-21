@@ -96,58 +96,58 @@ html, body, [class*="css"] {
   transition: all 0.2s ease;
 }
 .user-bubble {
-  background-color: #6C63FF;
+  background-color: #00C9A7;
   color: #ffffff;
   align-self: flex-end;
-  box-shadow: 0 0 18px rgba(108, 99, 255, 0.35);
+  box-shadow: 0 0 18px rgba(0, 201, 167, 0.35);
 }
 .bot-bubble {
-  background-color: #1a1a2e;
+  background-color: #0d1f1e;
   color: #e0e0e0;
   align-self: flex-start;
-  border-left: 3px solid #6C63FF;
+  border-left: 3px solid #00C9A7;
 }
 
 .citation-chip {
   display: inline-block;
   font-size: 0.75rem;
-  background-color: #1a1a2e;
-  color: #a78bfa;
-  border: 1px solid #6C63FF;
+  background-color: #0d1f1e;
+  color: #00f5d4;
+  border: 1px solid #00C9A7;
   border-radius: 20px;
   padding: 2px 10px;
   margin-top: 6px;
 }
 
 [data-testid="stButton"] button {
-  background-color: #1a1a2e;
+  background-color: #0d1f1e;
   color: #e0e0e0;
-  border: 1px solid #6C63FF;
+  border: 1px solid #00C9A7;
   border-radius: 8px;
   transition: all 0.2s ease;
 }
 [data-testid="stButton"] button:hover {
-  background-color: #6C63FF;
+  background-color: #00C9A7;
   color: #ffffff;
-  box-shadow: 0 0 14px rgba(108, 99, 255, 0.5);
-  border-color: #6C63FF;
+  box-shadow: 0 0 14px rgba(0, 201, 167, 0.5);
+  border-color: #00C9A7;
 }
 
 [data-testid="stChatInput"] textarea {
-  background-color: #1a1a2e;
+  background-color: #0d1f1e;
   color: #e0e0e0;
-  border: 1px solid #2e2e4e;
+  border: 1px solid #0d2e2a;
   border-radius: 12px;
 }
 [data-testid="stChatInput"] textarea:focus {
-  border-color: #6C63FF;
-  box-shadow: 0 0 10px rgba(108, 99, 255, 0.2);
+  border-color: #00C9A7;
+  box-shadow: 0 0 10px rgba(0, 201, 167, 0.2);
 }
 
 /* Onboarding heading */
 .onboarding-heading {
   text-align: center;
-  background: linear-gradient(90deg, #6C63FF, #a78bfa);
+  background: linear-gradient(90deg, #00C9A7, #00f5d4);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -158,8 +158,8 @@ html, body, [class*="css"] {
 
 /* Radio options — dark pill style */
 div[role="radiogroup"] label {
-  background-color: #0f0f1a !important;
-  border: 1px solid #2e2e4e !important;
+  background-color: #081514 !important;
+  border: 1px solid #0d2e2a !important;
   border-radius: 8px !important;
   padding: 0.5rem 1rem !important;
   margin: 0.2rem 0 !important;
@@ -168,27 +168,27 @@ div[role="radiogroup"] label {
   cursor: pointer !important;
 }
 div[role="radiogroup"] label:hover {
-  border-color: #6C63FF !important;
+  border-color: #00C9A7 !important;
 }
 div[role="radiogroup"] label:has(input:checked) {
-  border-color: #6C63FF !important;
-  background-color: rgba(108, 99, 255, 0.15) !important;
+  border-color: #00C9A7 !important;
+  background-color: rgba(0, 201, 167, 0.15) !important;
 }
 
 /* Primary button — Continue */
 button[data-testid="baseButton-primary"] {
-  background-color: #6C63FF !important;
+  background-color: #00C9A7 !important;
   color: #ffffff !important;
   border: none !important;
   border-radius: 10px !important;
   font-weight: 600 !important;
   font-size: 1rem !important;
-  box-shadow: 0 0 20px rgba(108, 99, 255, 0.35) !important;
+  box-shadow: 0 0 20px rgba(0, 201, 167, 0.35) !important;
   transition: all 0.2s ease !important;
 }
 button[data-testid="baseButton-primary"]:hover {
-  background-color: #5a52e0 !important;
-  box-shadow: 0 0 28px rgba(108, 99, 255, 0.55) !important;
+  background-color: #00a88c !important;
+  box-shadow: 0 0 28px rgba(0, 201, 167, 0.55) !important;
 }
 
 /* Chat input placeholder */
@@ -198,15 +198,15 @@ button[data-testid="baseButton-primary"]:hover {
 
 /* Sample questions expander */
 [data-testid="stExpander"] {
-  border: 1px solid #2e2e4e !important;
+  border: 1px solid #0d2e2a !important;
   border-radius: 10px !important;
-  background-color: #0f0f1a !important;
+  background-color: #081514 !important;
 }
 [data-testid="stExpander"] summary {
   color: #c0c0c0 !important;
 }
 [data-testid="stExpander"] summary:hover {
-  color: #a78bfa !important;
+  color: #00f5d4 !important;
 }
 
 .dots { display: inline-block; width: 1em; text-align: left; }
@@ -337,7 +337,7 @@ if "role" in profile and "tenure" in profile:
         )
 
 # --- Main Header ---
-st.markdown(f"<h1 style='text-align: center; background: linear-gradient(90deg, #6C63FF, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-family: Inter, sans-serif; font-weight: 700;'>{brand['app_name']} Assistant</h1>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='text-align: center; background: linear-gradient(90deg, #00C9A7, #00f5d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-family: Inter, sans-serif; font-weight: 700;'>{brand['app_name']} Assistant</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 1rem;'>Your go-to assistant for institutional knowledge, policies, and procedures.</p>", unsafe_allow_html=True)
 
 # --- Sample Questions ---
