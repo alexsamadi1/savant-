@@ -57,33 +57,33 @@ header {visibility: hidden;}
 
 html, body, [class*="css"] {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #1a1a1a;
+  color: #e0e0e0;
 }
 
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"] {
-  background-color: #f8f9fa;
+  background-color: #0a0a0f;
 }
 
 .main .block-container {
-  background-color: #f8f9fa;
+  background-color: #0a0a0f;
   padding-top: 2rem;
   padding-bottom: 2rem;
   max-width: 860px;
 }
 
 [data-testid="stSidebar"] {
-  background-color: #ffffff;
-  border-right: 1px solid #e8e8e8;
+  background-color: #111118;
+  border-right: 1px solid rgba(0, 201, 167, 0.15);
 }
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] span,
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] div {
-  color: #1a1a1a;
+  color: #e0e0e0;
 }
 [data-testid="stSidebar"] .stCaption {
-  color: #888888 !important;
+  color: #666666 !important;
 }
 
 .chat-bubble {
@@ -102,18 +102,17 @@ html, body, [class*="css"] {
   box-shadow: 0 0 18px rgba(0, 201, 167, 0.35);
 }
 .bot-bubble {
-  background-color: #ffffff;
-  color: #1a1a1a;
+  background-color: #0d1f1e;
+  color: #e0e0e0;
   align-self: flex-start;
   border-left: 3px solid #00C9A7;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .citation-chip {
   display: inline-block;
   font-size: 0.75rem;
-  background-color: #e6faf7;
-  color: #00896f;
+  background-color: #0d1f1e;
+  color: #00C9A7;
   border: 1px solid #00C9A7;
   border-radius: 20px;
   padding: 2px 10px;
@@ -121,8 +120,8 @@ html, body, [class*="css"] {
 }
 
 [data-testid="stButton"] button {
-  background-color: #ffffff;
-  color: #1a1a1a;
+  background-color: #0d1f1e;
+  color: #e0e0e0;
   border: 1px solid #00C9A7;
   border-radius: 8px;
   transition: all 0.2s ease;
@@ -130,19 +129,27 @@ html, body, [class*="css"] {
 [data-testid="stButton"] button:hover {
   background-color: #00C9A7;
   color: #ffffff;
-  box-shadow: 0 0 14px rgba(0, 201, 167, 0.4);
+  box-shadow: 0 0 14px rgba(0, 201, 167, 0.5);
   border-color: #00C9A7;
 }
 
-[data-testid="stChatInput"] textarea {
-  background-color: #ffffff;
-  color: #1a1a1a;
-  border: 1px solid #e0e0e0;
+/* Chat input container + text */
+div[data-testid="stChatInput"] {
+  background-color: #0d1f1e !important;
+  border: 1px solid rgba(0, 201, 167, 0.3) !important;
+  border-radius: 12px !important;
+}
+div[data-testid="stChatInput"] textarea {
+  background-color: #0d1f1e !important;
+  color: #ffffff !important;
   border-radius: 12px;
 }
 [data-testid="stChatInput"] textarea:focus {
   border-color: #00C9A7;
-  box-shadow: 0 0 8px rgba(0, 201, 167, 0.2);
+  box-shadow: 0 0 10px rgba(0, 201, 167, 0.2);
+}
+[data-testid="stChatInput"] textarea::placeholder {
+  color: #555 !important;
 }
 
 /* Onboarding heading */
@@ -159,20 +166,20 @@ html, body, [class*="css"] {
 
 /* Radio label text */
 div[data-testid="stRadio"] label {
-  color: #1a1a1a !important;
+  color: #ffffff !important;
 }
 div[data-testid="stRadio"] label p {
-  color: #1a1a1a !important;
+  color: #ffffff !important;
 }
 
-/* Radio options — light pill style */
+/* Radio options — dark pill style */
 div[role="radiogroup"] label {
-  background-color: #ffffff !important;
-  border: 1px solid #e8e8e8 !important;
+  background-color: #0d1f1e !important;
+  border: 1px solid rgba(0, 201, 167, 0.25) !important;
   border-radius: 8px !important;
   padding: 0.5rem 1rem !important;
   margin: 0.2rem 0 !important;
-  color: #1a1a1a !important;
+  color: #ffffff !important;
   transition: all 0.2s ease !important;
   cursor: pointer !important;
 }
@@ -181,7 +188,7 @@ div[role="radiogroup"] label:hover {
 }
 div[role="radiogroup"] label:has(input:checked) {
   border-color: #00C9A7 !important;
-  background-color: rgba(0, 201, 167, 0.08) !important;
+  background-color: rgba(0, 201, 167, 0.15) !important;
 }
 
 /* Primary button — Continue */
@@ -192,36 +199,22 @@ button[data-testid="baseButton-primary"] {
   border-radius: 10px !important;
   font-weight: 600 !important;
   font-size: 1rem !important;
-  box-shadow: 0 2px 12px rgba(0, 201, 167, 0.3) !important;
+  box-shadow: 0 0 20px rgba(0, 201, 167, 0.35) !important;
   transition: all 0.2s ease !important;
 }
 button[data-testid="baseButton-primary"]:hover {
   background-color: #00a88c !important;
-  box-shadow: 0 4px 18px rgba(0, 201, 167, 0.45) !important;
-}
-
-/* Chat input container + text */
-div[data-testid="stChatInput"] {
-  background-color: #ffffff !important;
-  border: 1px solid #e0e0e0 !important;
-  border-radius: 12px !important;
-}
-div[data-testid="stChatInput"] textarea {
-  color: #1a1a1a !important;
-  background-color: #ffffff !important;
-}
-[data-testid="stChatInput"] textarea::placeholder {
-  color: #aaa !important;
+  box-shadow: 0 0 28px rgba(0, 201, 167, 0.55) !important;
 }
 
 /* Sample questions expander */
 [data-testid="stExpander"] {
-  border: 1px solid #e8e8e8 !important;
+  border: 1px solid rgba(0, 201, 167, 0.2) !important;
   border-radius: 10px !important;
-  background-color: #ffffff !important;
+  background-color: #111118 !important;
 }
 [data-testid="stExpander"] summary {
-  color: #444444 !important;
+  color: #e0e0e0 !important;
 }
 [data-testid="stExpander"] summary:hover {
   color: #00C9A7 !important;
