@@ -298,6 +298,17 @@ if "role" in profile and "tenure" in profile:
         st.markdown(f"**📆 Tenure:** {tenure}")
         st.caption(f"_{brand['sidebar_caption']}_")
 
+        models_cfg = get_config()["models"]
+        if "selected_model" not in st.session_state:
+            st.session_state["selected_model"] = models_cfg["default"]
+        model_options = models_cfg["options"]
+        model_labels = [opt["label"] for opt in model_options]
+        model_values = [opt["value"] for opt in model_options]
+        current_index = model_values.index(st.session_state["selected_model"]) if st.session_state["selected_model"] in model_values else 0
+        selected_label = st.selectbox("🤖 Model", model_labels, index=current_index)
+        st.session_state["selected_model"] = model_values[model_labels.index(selected_label)]
+        st.caption("Swap models anytime — won't reset your chat")
+
         with st.expander("ℹ️ How to Use & Support", expanded=False):
             st.markdown("- Ask clear, specific questions")
             st.markdown("- Answers come from your organization's internal documents")
@@ -421,7 +432,7 @@ with st.spinner("Searching documents..."):
             messages = build_messages(user_input, fallback_context, profile, fallback=True)
 
         # --- Generate answer (now returns tuple) ---
-        draft_answer, source, page = generate_answer(messages, client, docs=docs)
+        draft_answer, source, page = generate_answer(messages, client, docs=docs, model=st.session_state.get("selected_model", "gpt-4o-mini"))
         answer = revise_answer_with_gpt(user_input, draft_answer, client)
 
         # --- Stream answer ---

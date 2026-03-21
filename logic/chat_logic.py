@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 from config_loader import get_config
 
 # --- Rerank using GPT ---
-def rerank_with_gpt(query, chunks, client: OpenAI) -> Optional[str]:
+def rerank_with_gpt(query, chunks, client: OpenAI, model: str = "gpt-4o-mini") -> Optional[str]:
     if not chunks:
         return None
 
@@ -37,7 +37,7 @@ def rerank_with_gpt(query, chunks, client: OpenAI) -> Optional[str]:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0
         )
@@ -81,7 +81,7 @@ def summarize_fallback(query, chunks: List[Document], client: OpenAI) -> str:
         return "I'm not confident I can answer that directly. Please check the source documentation or contact your administrator for guidance."
 
 # --- Answer Revision ---
-def revise_answer_with_gpt(question, draft_answer, client: OpenAI) -> str:
+def revise_answer_with_gpt(question, draft_answer, client: OpenAI, model: str = "gpt-4o-mini") -> str:
     messages = [
         {
             "role": "system",
@@ -109,7 +109,7 @@ def revise_answer_with_gpt(question, draft_answer, client: OpenAI) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0
         )
@@ -165,7 +165,7 @@ def generate_response(
     source_doc = docs[0].metadata.get("source", "Unknown") if docs else "None"
     return final_answer, source_doc
 
-def generate_answer(messages, client, docs=None) -> Tuple[str, str, Optional[int]]:
+def generate_answer(messages, client, docs=None, model: str = "gpt-4o-mini") -> Tuple[str, str, Optional[int]]:
     """
     Call OpenAI and return (answer, source, page).
     source and page are extracted from the first doc's metadata if provided.
@@ -179,7 +179,7 @@ def generate_answer(messages, client, docs=None) -> Tuple[str, str, Optional[int
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=model,
             messages=messages
         )
         answer = response.choices[0].message.content.strip()

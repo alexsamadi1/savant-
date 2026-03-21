@@ -31,3 +31,10 @@ chat_placeholder = "Ask me anything about your organization's knowledge base..."
 
 [storage]
 s3_docs_bucket = "innovim-hr-docs-1"
+
+[models]
+default = "gpt-4o-mini"
+options = [
+    {label = "GPT-4o mini ⚡ (Fast)", value = "gpt-4o-mini"},
+    {label = "GPT-4o (Smart)", value = "gpt-4o"}
+]
