@@ -2,7 +2,7 @@
 app_name = "Savant"
 company_name = "Savant"
 page_icon = "📘"
-logo_path = "assets/logo.png"
+logo_path = "assets/savant_logo_teal.svg"
 sidebar_title = "Savant Assistant"
 sidebar_caption = "Quick answers from your organization's knowledge base."
 footer_text = "Savant • v1.0 • Powered by AI"
