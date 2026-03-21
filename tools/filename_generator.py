@@ -15,7 +15,7 @@ def generate_smart_filename(document_text: str, original_name: str = "") -> str:
             "role": "system",
             "content": (
                 "You're an assistant that generates clean, descriptive filenames from document content. "
-                "Use lowercase and underscores. Make it concise and relevant to HR topics like onboarding, PTO, telework, benefits, etc. "
+                "Use lowercase and underscores. Make it concise and descriptive of the document's topic (e.g. onboarding, policy, procedures, guide). "
                 "No special characters or punctuation. Respond with only the filename base (no extension)."
             )
         },

@@ -18,7 +18,7 @@ def enrich_pdf_chunks(pdf_path: str) -> list:
         if not positions:
             enriched_chunks.append(Document(
                 page_content=text.strip(),
-                metadata={"source": f"employee_handbook_page_{page_num + 1}"}
+                metadata={"source": f"document_page_{page_num + 1}"}
             ))
             continue
 
@@ -31,14 +31,14 @@ def enrich_pdf_chunks(pdf_path: str) -> list:
 
             enriched_text = (
                 f"SECTION: {title}\n"
-                f"Keywords: vacation, PTO, benefits, remote work, telecommute, timecard, leave, supervisor, holiday, HR, policy.\n\n"
+                f"Keywords: policy, procedures, guidelines, onboarding, processes, workflows, documentation, organization.\n\n"
                 f"{chunk_text}"
             )
 
             enriched_chunks.append(Document(
                 page_content=enriched_text,
                 metadata={
-                    "source": f"employee_handbook_page_{page_num + 1}",
+                    "source": f"document_page_{page_num + 1}",
                     "section_title": title
                 }
             ))

@@ -9,7 +9,7 @@ footer_text = "Savant • v1.0 • Powered by AI"
 primary_color = "#1B4F72"
 
 [contact]
-hr_email = "hr@savant.internal"
+contact_email = "admin@savant.internal"
 feedback_url = "https://docs.google.com/forms/d/e/1FAIpQLSc31lOd_KRn9mpffhQNwuthyzh1b3KTSeMGpb12hdJQ5IT_hQ/viewform?usp=dialog"
 
 [onboarding]
