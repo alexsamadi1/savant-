@@ -21,7 +21,7 @@ def get_openai_api_key():
 
 # --- Build and Save Combined Vectorstore ---
 def build_vectorstore(
-    pdf_path="docs/InnovimEmployeeHandbook.pdf",
+    pdf_path="docs/EmployeeHandbook.pdf",
     docx_path="docs/innovim_onboarding.docx",
     index_path="faiss_index",
     api_key=None
@@ -64,8 +64,8 @@ def build_vectorstore(
     # --- Embed and Save ---
     print("💾 Saving FAISS index...")
     Path(index_path).mkdir(parents=True, exist_ok=True)
-    vectorstore = Chroma.from_documents(docs, embeddings, persist_directory=index_path)
-    vectorstore.persist()
+    vectorstore = FAISS.from_documents(docs, embeddings)
+    vectorstore.save_local(index_path)
 
     print(f"✅ Vectorstore built and saved to '{index_path}/'")
     return vectorstore
@@ -92,11 +92,9 @@ def rebuild_vectorstore_from_docs(docs_path="docs", faiss_path="faiss_index"):
     chunks = splitter.split_documents(all_docs)
     embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
 
-    faiss_path = "faiss_index/index"
-    vectorstore = FAISS.from_documents(chunks, embeddings)
     os.makedirs("faiss_index", exist_ok=True)
-    vectorstore.save_local(faiss_path)
-    vectorstore.persist()
+    vectorstore = FAISS.from_documents(chunks, embeddings)
+    vectorstore.save_local("faiss_index")
     return len(all_docs), len(chunks)
 
 

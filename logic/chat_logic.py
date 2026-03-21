@@ -2,6 +2,7 @@ import time
 from openai import OpenAI
 from typing import List, Tuple, Optional
 from langchain.schema.document import Document
+from config_loader import get_config
 
 # --- Rerank using GPT ---
 def rerank_with_gpt(query, chunks, client: OpenAI) -> Optional[str]:
@@ -62,9 +63,9 @@ def summarize_fallback(query, chunks: List[Document], client: OpenAI) -> str:
         {
             "role": "system",
             "content": (
-                "You are a helpful assistant trained on Innovim's employee handbook and onboarding documents. "
+                f"You are a helpful assistant trained on {get_config()['brand']['company_name']}'s employee handbook and onboarding documents. "
                 "Summarize a cautious answer using the text provided. If unclear, advise contacting HR. "
-                "Never fabricate Innovim-specific policies."
+                "Never fabricate company-specific policies."
             )
         },
         {
@@ -138,8 +139,8 @@ def generate_response(
 
     if reranked:
         system_prompt = (
-            f"You are Innovim’s professional HR assistant. The user is a {user_profile['role']} "
-            f"with {user_profile['tenure']} at the company.\n\n"
+            f"You are {get_config()[‘brand’][‘company_name’]}’s professional HR assistant. The user is a {user_profile[‘role’]} "
+            f"with {user_profile[‘tenure’]} at the company.\n\n"
             "Your job is to clearly answer the user's HR question using the excerpt provided. "
             "If you're unsure, advise the user to contact HR."
         )
@@ -151,7 +152,7 @@ def generate_response(
         fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in chunks])
         messages = [
             {"role": "system", "content": (
-                "You are a helpful HR assistant trained on Innovim documents. The question wasn’t answered clearly by any one excerpt, "
+                f"You are a helpful HR assistant trained on {get_config()[‘brand’][‘company_name’]} documents. The question wasn’t answered clearly by any one excerpt, "
                 "but here are some partial chunks. Summarize a helpful answer based on what you can."
             )},
             {"role": "user", "content": f"User question: {query}\n\nContext snippets:\n{fallback_context}"}
@@ -195,7 +196,7 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful HR assistant trained on Innovim documents. "
+                    f"You are a helpful HR assistant trained on {get_config()[‘brand’][‘company_name’]} documents. "
                     "The question wasn’t answered clearly by any one excerpt, but here are some partial chunks. "
                     "Summarize a helpful answer based on what you can.\n"
                     "If unsure, advise the user to contact HR."
@@ -218,7 +219,7 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
             {
                 "role": "system",
                 "content": (
-                    f"You are Innovim’s professional HR assistant. The user is a {role} "
+                    f"You are {get_config()[‘brand’][‘company_name’]}’s professional HR assistant. The user is a {role} "
                     f"with {tenure} at the company.\n\n"
                     "Your job is to clearly answer the user's HR question using the excerpt provided. "
                     "Be helpful and professional. If you're unsure, advise the user to contact HR."
