@@ -46,48 +46,190 @@ if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
 # --- Global CSS ---
-st.markdown(f"""
+st.markdown("""
 <style>
-.chat-bubble {{
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+html, body, [class*="css"] {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #e0e0e0;
+}
+
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"] {
+  background-color: #0a0a0f;
+}
+
+.main .block-container {
+  background-color: #0a0a0f;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  max-width: 860px;
+}
+
+[data-testid="stSidebar"] {
+  background-color: #111118;
+  border-right: 1px solid rgba(0, 201, 167, 0.15);
+}
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] div {
+  color: #e0e0e0;
+}
+[data-testid="stSidebar"] .stCaption {
+  color: #666666 !important;
+}
+
+.chat-bubble {
   margin: 0.5rem 0;
-  padding: 0.75rem 1rem;
-  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 18px;
   display: inline-block;
   max-width: 90%;
-  line-height: 1.5;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}}
-.user-bubble {{
-  background-color: {brand["primary_color"]};
+  line-height: 1.6;
+  transition: all 0.2s ease;
+}
+.user-bubble {
+  background-color: #00C9A7;
   color: #ffffff;
   align-self: flex-end;
-}}
-.bot-bubble {{
-  background-color: #F0F4F8;
-  color: #0B1724;
+  box-shadow: 0 0 18px rgba(0, 201, 167, 0.35);
+}
+.bot-bubble {
+  background-color: #0d1f1e;
+  color: #e0e0e0;
   align-self: flex-start;
-}}
-.citation-chip {{
+  border-left: 3px solid #00C9A7;
+}
+
+.citation-chip {
   display: inline-block;
   font-size: 0.75rem;
-  background-color: #EAF3DE;
-  color: #27500A;
-  border: 1px solid #C0DD97;
+  background-color: #0d1f1e;
+  color: #00C9A7;
+  border: 1px solid #00C9A7;
   border-radius: 20px;
   padding: 2px 10px;
   margin-top: 6px;
-}}
-.dots {{ display: inline-block; width: 1em; text-align: left; }}
-.dots::after {{
+}
+
+[data-testid="stButton"] button {
+  background-color: #0d1f1e;
+  color: #e0e0e0;
+  border: 1px solid #00C9A7;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+[data-testid="stButton"] button:hover {
+  background-color: #00C9A7;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(0, 201, 167, 0.5);
+  border-color: #00C9A7;
+}
+
+/* Chat input container + text */
+div[data-testid="stChatInput"] {
+  background-color: #0d1f1e !important;
+  border: 1px solid rgba(0, 201, 167, 0.3) !important;
+  border-radius: 12px !important;
+}
+div[data-testid="stChatInput"] textarea {
+  background-color: #0d1f1e !important;
+  color: #ffffff !important;
+  border-radius: 12px;
+}
+[data-testid="stChatInput"] textarea:focus {
+  border-color: #00C9A7;
+  box-shadow: 0 0 10px rgba(0, 201, 167, 0.2);
+}
+[data-testid="stChatInput"] textarea::placeholder {
+  color: #555 !important;
+}
+
+/* Onboarding heading */
+.onboarding-heading {
+  text-align: center;
+  background: linear-gradient(90deg, #00C9A7, #00f5d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+
+/* Radio label text */
+div[data-testid="stRadio"] label {
+  color: #ffffff !important;
+}
+div[data-testid="stRadio"] label p {
+  color: #ffffff !important;
+}
+
+/* Radio options — dark pill style */
+div[role="radiogroup"] label {
+  background-color: #0d1f1e !important;
+  border: 1px solid rgba(0, 201, 167, 0.25) !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 1rem !important;
+  margin: 0.2rem 0 !important;
+  color: #ffffff !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+}
+div[role="radiogroup"] label:hover {
+  border-color: #00C9A7 !important;
+}
+div[role="radiogroup"] label:has(input:checked) {
+  border-color: #00C9A7 !important;
+  background-color: rgba(0, 201, 167, 0.15) !important;
+}
+
+/* Primary button — Continue */
+button[data-testid="baseButton-primary"] {
+  background-color: #00C9A7 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  font-size: 1rem !important;
+  box-shadow: 0 0 20px rgba(0, 201, 167, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+button[data-testid="baseButton-primary"]:hover {
+  background-color: #00a88c !important;
+  box-shadow: 0 0 28px rgba(0, 201, 167, 0.55) !important;
+}
+
+/* Sample questions expander */
+[data-testid="stExpander"] {
+  border: 1px solid rgba(0, 201, 167, 0.2) !important;
+  border-radius: 10px !important;
+  background-color: #111118 !important;
+}
+[data-testid="stExpander"] summary {
+  color: #e0e0e0 !important;
+}
+[data-testid="stExpander"] summary:hover {
+  color: #00C9A7 !important;
+}
+
+.dots { display: inline-block; width: 1em; text-align: left; }
+.dots::after {
   content: '...';
   animation: dotsAnim 1.5s steps(3, end) infinite;
-}}
-@keyframes dotsAnim {{
-  0%   {{ content: ''; }}
-  33%  {{ content: '.'; }}
-  66%  {{ content: '..'; }}
-  100% {{ content: '...'; }}
-}}
+}
+@keyframes dotsAnim {
+  0%   { content: ''; }
+  33%  { content: '.'; }
+  66%  { content: '..'; }
+  100% { content: '...'; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,7 +240,10 @@ if "user_profile" not in st.session_state:
 profile = st.session_state.user_profile
 
 if "role" not in profile or "tenure" not in profile:
-    st.markdown("## 👋 Welcome! Let's get to know you first")
+    st.markdown(
+        "<h2 class='onboarding-heading'>👋 Welcome! Let's get to know you first</h2>",
+        unsafe_allow_html=True
+    )
 
     st.session_state.role_selection = st.radio(
         onboarding["role_question"],
@@ -111,7 +256,7 @@ if "role" not in profile or "tenure" not in profile:
         key="tenure_radio"
     )
 
-    if st.button("✅ Continue"):
+    if st.button("✅ Continue", type="primary", use_container_width=True):
         profile["role"] = st.session_state.role_selection
         profile["tenure"] = st.session_state.tenure_selection
         st.success("You're all set! You can now start asking questions below 👇")
