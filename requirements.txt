@@ -5,9 +5,11 @@ faiss-cpu
 pypdf==3.17.4
 
 # LangChain (stable, compatible)
-langchain==0.1.14
-langchain-openai==0.0.6
-langchain-community==0.0.35
+langchain==0.3.7
+langchain-openai==0.2.9
+langchain-community==0.3.7
+langchain-core==0.3.19
+langchain-text-splitters==0.3.3
 
 # Utilities
 tiktoken==0.9.0

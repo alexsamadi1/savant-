@@ -1,7 +1,7 @@
 import time
 from openai import OpenAI
 from typing import List, Tuple, Optional
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 from config_loader import get_config
 
 # --- Rerank using GPT ---
