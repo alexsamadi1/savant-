@@ -1,32 +1,33 @@
 [brand]
-app_name = "InnoAsk"
+app_name = "Savant"
+company_name = "Savant"
 page_icon = "📘"
-logo_path = "assets/innovim_vector.png"
-sidebar_title = "InnoAsk HR Assistant"
-sidebar_caption = "Quick answers to your HR questions."
-footer_text = "Internal use only • v1.0 • Updated June 2025"
+logo_path = "assets/savant_logo_teal.svg"
+sidebar_title = "Savant Assistant"
+sidebar_caption = "Quick answers from your organization's knowledge base."
+footer_text = "Savant • v1.0 • Powered by AI"
 primary_color = "#1B4F72"
 
 [contact]
-hr_email = "mkramer@innovim.com"
+hr_email = "hr@savant.internal"
 feedback_url = "https://docs.google.com/forms/d/e/1FAIpQLSc31lOd_KRn9mpffhQNwuthyzh1b3KTSeMGpb12hdJQ5IT_hQ/viewform?usp=dialog"
 
 [onboarding]
-role_question = "What's your role at Innovim?"
-tenure_question = "How long have you been with Innovim?"
-role_options = ["Program Manager", "General Staff"]
+role_question = "What's your role?"
+tenure_question = "How long have you been with the company?"
+role_options = ["Manager", "Individual Contributor", "New Hire", "Other"]
 tenure_options = ["New Hire (0–30 days)", "1–6 Months", "6+ Months", "2+ Years"]
 
 [assistant]
-welcome_message = "Hi there! I'm your HR Assistant. You can ask me anything about:"
-topics = ["Time tracking", "Vacation / PTO", "Remote work", "Benefits & forms"]
+welcome_message = "Hi there! I'm your Knowledge Assistant. You can ask me anything about:"
+topics = ["Company policies", "Onboarding & procedures", "Tools & systems", "Processes & workflows"]
 sample_questions = [
-    "How many vacation days do I get?",
-    "What's the policy on remote work?",
-    "How do I update my benefits info?"
+    "What is our onboarding process?",
+    "How do I submit a request?",
+    "Where can I find the policy on X?"
 ]
-fallback_message = "I couldn't find a strong match in the documents. Please try rephrasing or contact HR."
-chat_placeholder = "Ask me anything—try 'What's the policy on remote work?'"
+fallback_message = "I couldn't find a strong match in the documents. Please try rephrasing or contact your administrator."
+chat_placeholder = "Ask me anything about your organization's knowledge base..."
 
 [storage]
 s3_docs_bucket = "innovim-hr-docs-1"

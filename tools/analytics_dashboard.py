@@ -1,3 +1,4 @@
+from tools.s3_utils import get_secret
 import streamlit as st
 try:
     from tools.s3_utils import get_secret
