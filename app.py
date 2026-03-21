@@ -157,6 +157,14 @@ html, body, [class*="css"] {
   margin-bottom: 1.5rem;
 }
 
+/* Radio label text */
+div[data-testid="stRadio"] label {
+  color: #1a1a1a !important;
+}
+div[data-testid="stRadio"] label p {
+  color: #1a1a1a !important;
+}
+
 /* Radio options — light pill style */
 div[role="radiogroup"] label {
   background-color: #ffffff !important;
@@ -192,7 +200,16 @@ button[data-testid="baseButton-primary"]:hover {
   box-shadow: 0 4px 18px rgba(0, 201, 167, 0.45) !important;
 }
 
-/* Chat input placeholder */
+/* Chat input container + text */
+div[data-testid="stChatInput"] {
+  background-color: #ffffff !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 12px !important;
+}
+div[data-testid="stChatInput"] textarea {
+  color: #1a1a1a !important;
+  background-color: #ffffff !important;
+}
 [data-testid="stChatInput"] textarea::placeholder {
   color: #aaa !important;
 }
