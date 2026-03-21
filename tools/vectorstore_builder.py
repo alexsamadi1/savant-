@@ -106,10 +106,6 @@ def rebuild_vectorstore_from_s3():
     Returns (doc_count, chunk_count)
     """
     import streamlit as st
-try:
-    from tools.s3_utils import get_secret
-except ImportError:
-    pass
     print("🔄 Starting full vectorstore rebuild from S3...")
 
     try:
@@ -216,10 +212,6 @@ def rebuild_vectorstore_enriched():
     Returns (doc_count, chunk_count)
     """
     import streamlit as st
-try:
-    from tools.s3_utils import get_secret
-except ImportError:
-    pass
     from tools.loaders import enrich_pdf_chunks, chunk_docx_with_metadata
     print("🔄 Starting enriched vectorstore rebuild...")
 
