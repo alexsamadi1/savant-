@@ -1,4 +1,5 @@
 import os
+import pickle
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
@@ -37,6 +38,11 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
         bucket = get_secret("S3_INDEX_BUCKET")
         s3.download_file(bucket, "index.faiss", str(faiss_file))
         s3.download_file(bucket, "index.pkl", str(pkl_file))
+        bm25_file = path / "bm25_index.pkl"
+        try:
+            s3.download_file(bucket, "bm25_index.pkl", str(bm25_file))
+        except Exception:
+            pass  # BM25 index may not exist yet (pre-hybrid rebuild)
         print("✅ Successfully loaded FAISS index from S3")
 
     except botocore.exceptions.BotoCoreError as e:
@@ -44,9 +50,21 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
         if not faiss_file.exists() or not pkl_file.exists():
             raise FileNotFoundError("❌ No local index found either. Cannot load vectorstore.")
 
-    # Load from local files
+    # Load FAISS from local files
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-    return FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
+    faiss_vectorstore = FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
+
+    # Load BM25 index if present
+    bm25_file = path / "bm25_index.pkl"
+    bm25_index = None
+    if bm25_file.exists():
+        with open(bm25_file, "rb") as f:
+            bm25_index = pickle.load(f)
+        print("✅ BM25 index loaded")
+    else:
+        print("⚠️ No BM25 index found — falling back to FAISS-only search")
+
+    return faiss_vectorstore, bm25_index
 
 # --- Build and Save Combined Vectorstore ---
 def build_combined_vectorstore(pdf_path: str, docx_path: str, index_path: str, api_key: str):

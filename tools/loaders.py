@@ -1,6 +1,6 @@
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
+from docx import Document as DocxDocument
 import re
 
 def enrich_pdf_chunks(pdf_path: str) -> list:
@@ -46,12 +46,65 @@ def enrich_pdf_chunks(pdf_path: str) -> list:
     return enriched_chunks
 
 def chunk_docx_with_metadata(docx_path: str) -> list:
-    loader = UnstructuredWordDocumentLoader(docx_path)
-    docs = loader.load()
+    doc = DocxDocument(docx_path)
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    chunks = splitter.split_documents(docs)
+    HEADING_STYLES = {"Heading 1", "Heading 2", "Heading 3"}
+    MIN_CHUNK_SIZE = 100
 
-    for chunk in chunks:
-        chunk.metadata["source"] = "orientation_guide"
+    current_heading = "Introduction"
+    current_paragraphs = []
+    sections = []  # list of (heading, paragraphs_text)
+
+    from docx.oxml.ns import qn
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    para_map = {p._element: p for p in doc.paragraphs}
+    table_map = {t._element: t for t in doc.tables}
+
+    for child in doc.element.body:
+        if child in para_map:
+            para = para_map[child]
+            text = para.text.strip()
+            if not text:
+                continue
+            style_name = para.style.name if para.style and para.style.name else ""
+            if style_name in HEADING_STYLES:
+                sections.append((current_heading, "\n".join(current_paragraphs)))
+                current_heading = text
+                current_paragraphs = []
+            else:
+                current_paragraphs.append(text)
+        elif child in table_map:
+            table = table_map[child]
+            for row in table.rows:
+                for cell in row.cells:
+                    cell_text = cell.text.strip()
+                    if cell_text:
+                        current_paragraphs.append(cell_text)
+
+    sections.append((current_heading, "\n".join(current_paragraphs)))
+
+    chunks = []
+    for heading, body in sections:
+        if not body.strip():
+            continue
+
+        enriched_text = (
+            f"SECTION: {heading}\n"
+            f"Keywords: policy, procedures, guidelines, onboarding, processes, workflows, documentation, organization.\n\n"
+            f"{body}"
+        )
+
+        if len(body) < MIN_CHUNK_SIZE and chunks:
+            chunks[-1] = Document(
+                page_content=chunks[-1].page_content + "\n\n" + enriched_text,
+                metadata=chunks[-1].metadata
+            )
+        else:
+            chunks.append(Document(
+                page_content=enriched_text,
+                metadata={"source": "orientation_guide", "section_title": heading}
+            ))
+
     return chunks

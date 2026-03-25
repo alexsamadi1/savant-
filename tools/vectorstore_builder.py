@@ -1,4 +1,5 @@
 import os
+import pickle
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
@@ -9,6 +10,7 @@ import tempfile
 import boto3
 import json
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from tools.s3_utils import get_secret
 
 # --- Load API Key ---
@@ -187,23 +189,102 @@ def rebuild_vectorstore_from_s3():
     vectorstore.save_local("faiss_index")
     print("💾 Saved vectorstore locally to faiss_index/")
 
+    # Build and save BM25 index
+    from rank_bm25 import BM25Okapi
+    bm25_corpus = [chunk.page_content.split() for chunk in chunks]
+    bm25_obj = BM25Okapi(bm25_corpus)
+    with open("faiss_index/bm25_index.pkl", "wb") as f:
+        pickle.dump({"index": bm25_obj, "docs": chunks}, f)
+    print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
+
     # Upload to S3
     try:
         s3.upload_file("faiss_index/index.faiss", index_bucket, "index.faiss")
         s3.upload_file("faiss_index/index.pkl", index_bucket, "index.pkl")
+        s3.upload_file("faiss_index/bm25_index.pkl", index_bucket, "bm25_index.pkl")
         print("☁️ Uploaded new index to S3")
     except Exception as e:
         print(f"⚠️ Could not upload index to S3: {e}")
 
     return doc_count, len(chunks)
 
-def get_relevant_chunks(query, vectorstore, k=5):
+def get_relevant_chunks(query, vectorstore, k=20, bm25_index=None):
     try:
-        chunks = vectorstore.similarity_search(query, k=10)
-        return chunks
+        faiss_results = vectorstore.similarity_search(query, k=k)
+
+        if bm25_index is None:
+            return faiss_results
+
+        bm25_obj = bm25_index["index"]
+        bm25_docs = bm25_index["docs"]
+
+        tokenized_query = query.split()
+        scores = bm25_obj.get_scores(tokenized_query)
+        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
+        bm25_results = [bm25_docs[i] for i in top_indices]
+
+        # Reciprocal Rank Fusion
+        rrf_scores = {}
+        doc_map = {}
+
+        for rank, doc in enumerate(faiss_results):
+            key = doc.page_content[:200]
+            rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (rank + 60)
+            doc_map[key] = doc
+
+        for rank, doc in enumerate(bm25_results):
+            key = doc.page_content[:200]
+            rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (rank + 60)
+            doc_map[key] = doc
+
+        sorted_keys = sorted(rrf_scores, key=lambda x: rrf_scores[x], reverse=True)
+        return [doc_map[key] for key in sorted_keys[:k]]
+
     except Exception as e:
         print(f"[Vector Search Error] {e}")
         return []
+def add_contextual_embeddings(chunks, api_key):
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    print(f"🧠 Adding contextual embeddings to {len(chunks)} chunks...")
+
+    def contextualize(chunk):
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a document indexing assistant. Your job is to write a single short sentence "
+                            "(max 20 words) that situates this chunk within its source document. Be specific about "
+                            "what document and section this is from."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Document source: {chunk.metadata.get('source', 'unknown')}\n"
+                            f"Section: {chunk.metadata.get('section_title', 'unknown')}\n"
+                            f"Chunk content: {chunk.page_content[:500]}\n\n"
+                            "Write one sentence describing what document and section this chunk comes from."
+                        )
+                    }
+                ],
+                temperature=0
+            )
+            context_sentence = response.choices[0].message.content.strip()
+            chunk.page_content = f"{context_sentence}\n\n{chunk.page_content}"
+        except Exception:
+            pass  # leave chunk unchanged on failure
+        return chunk
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        chunks = list(executor.map(contextualize, chunks))
+
+    return chunks
+
+
 def rebuild_vectorstore_enriched():
     """
     Full rebuild using enriched chunking — same method as the original
@@ -273,6 +354,8 @@ def rebuild_vectorstore_enriched():
 
     print(f"🔬 Total: {len(all_chunks)} chunks from {doc_count} documents")
 
+    all_chunks = add_contextual_embeddings(all_chunks, get_openai_api_key())
+
     embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
     vectorstore = FAISS.from_documents(all_chunks, embeddings)
 
@@ -280,9 +363,18 @@ def rebuild_vectorstore_enriched():
     vectorstore.save_local("faiss_index")
     print("💾 Saved locally to faiss_index/")
 
+    # Build and save BM25 index
+    from rank_bm25 import BM25Okapi
+    bm25_corpus = [chunk.page_content.split() for chunk in all_chunks]
+    bm25_obj = BM25Okapi(bm25_corpus)
+    with open("faiss_index/bm25_index.pkl", "wb") as f:
+        pickle.dump({"index": bm25_obj, "docs": all_chunks}, f)
+    print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
+
     try:
         s3.upload_file("faiss_index/index.faiss", index_bucket, "index.faiss")
         s3.upload_file("faiss_index/index.pkl", index_bucket, "index.pkl")
+        s3.upload_file("faiss_index/bm25_index.pkl", index_bucket, "bm25_index.pkl")
         print("☁️ Uploaded new index to S3")
     except Exception as e:
         print(f"⚠️ Could not upload to S3: {e}")

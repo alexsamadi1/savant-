@@ -211,28 +211,58 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
             }
         ]
     else:
-        source = context_chunk.get("source", "Unknown Document")
-        page = context_chunk.get("page")
-        source_citation = f"{source}, page {page}" if page else source
+        if isinstance(context_chunk, list):
+            parts = []
+            for i, chunk in enumerate(context_chunk):
+                source = chunk.get("source", "Unknown Document")
+                page = chunk.get("page")
+                header = f"[Excerpt {i+1} from {source}, page {page}]" if page else f"[Excerpt {i+1} from {source}]"
+                parts.append(f"{header}\n{chunk['text']}")
+            combined_text = "\n\n---\n\n".join(parts)
 
-        return [
-            {
-                "role": "system",
-                "content": (
-                    f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {role} "
-                    f"with {tenure} at the company.\n\n"
-                    "Your job is to clearly answer the user's question using the excerpt from internal documentation provided. "
-                    "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
-                )
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"User question: {user_input}\n\n"
-                    f"Relevant excerpt (from {source_citation}):\n\n{context_chunk['text']}"
-                )
-            }
-        ]
+            return [
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {role} "
+                        f"with {tenure} at the company.\n\n"
+                        "Your job is to synthesize a clear, accurate answer using the excerpts from internal documentation provided. "
+                        "If excerpts cover different aspects of the question, combine them into one cohesive answer. "
+                        "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"User question: {user_input}\n\n"
+                        f"Relevant excerpts:\n\n{combined_text}"
+                    )
+                }
+            ]
+        else:
+            source = context_chunk.get("source", "Unknown Document")
+            page = context_chunk.get("page")
+            source_citation = f"{source}, page {page}" if page else source
+
+            return [
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {role} "
+                        f"with {tenure} at the company.\n\n"
+                        "Your job is to synthesize a clear, accurate answer using the excerpts from internal documentation provided. "
+                        "If excerpts cover different aspects of the question, combine them into one cohesive answer. "
+                        "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"User question: {user_input}\n\n"
+                        f"Relevant excerpts:\n\n[Excerpt from {source_citation}]\n{context_chunk['text']}"
+                    )
+                }
+            ]
     
 def suggest_follow_ups(user_question, answer, client: OpenAI) -> list:
     prompt = (

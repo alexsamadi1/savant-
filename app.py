@@ -7,7 +7,7 @@ from tools.vectorstore_builder import rebuild_vectorstore_from_s3, get_relevant_
 from tools.log_utils import ensure_log_file_exists, log_chat_interaction
 from tools.analytics_dashboard import show_analytics_dashboard
 from tools.filename_generator import generate_smart_filename, extract_text_from_docx
-from logic.chat_logic import rerank_with_gpt, revise_answer_with_gpt, generate_answer, build_messages
+from logic.chat_logic import generate_answer, build_messages
 from config_loader import get_config
 from io import BytesIO
 from pathlib import Path
@@ -275,9 +275,10 @@ def get_vectorstore():
         return load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
     except Exception as e:
         st.warning(f"⚠️ Couldn't load vectorstore from S3. Rebuilding... ({e})")
-        return rebuild_vectorstore_from_s3()
+        rebuild_vectorstore_from_s3()
+        return load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
 
-vectorstore = get_vectorstore()
+vectorstore, bm25_index = get_vectorstore()
 
 # --- OpenAI Client ---
 client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
@@ -345,6 +346,13 @@ if "role" in profile and "tenure" in profile:
                     else:
                         st.info("File already uploaded.")
 
+                if st.button("🔄 Rebuild Knowledge Base"):
+                    with st.spinner("Rebuilding knowledge base from S3... this takes 1-2 minutes"):
+                        from tools.vectorstore_builder import rebuild_vectorstore_enriched
+                        doc_count, chunk_count = rebuild_vectorstore_enriched()
+                    st.success(f"✅ Knowledge base rebuilt — {doc_count} documents, {chunk_count} chunks indexed")
+                    st.cache_resource.clear()
+
                 if st.button("📊 Open Dashboard"):
                     st.session_state.show_analytics = True
 
@@ -404,11 +412,7 @@ with st.spinner("Searching documents..."):
             unsafe_allow_html=True
         )
 
-        docs = get_relevant_chunks(user_input, vectorstore, k=5)
-        chunks = docs[:3]
-
-        reranked_chunk = rerank_with_gpt(user_input, chunks, client)
-        best_chunk = reranked_chunk if (reranked_chunk and "Chunk" not in reranked_chunk) else None
+        docs = get_relevant_chunks(user_input, vectorstore, k=20, bm25_index=bm25_index)
 
         if not docs:
             answer = assistant["fallback_message"]
@@ -417,23 +421,18 @@ with st.spinner("Searching documents..."):
             log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="summary")
             st.stop()
 
-        if best_chunk:
-            context = {
-                "text": reranked_chunk,
-                "source": docs[0].metadata.get("source"),
-                "page": docs[0].metadata.get("page")
+        top_chunks = [
+            {
+                "text": doc.page_content,
+                "source": doc.metadata.get("source"),
+                "page": doc.metadata.get("page")
             }
-            messages = build_messages(user_input, context, profile, fallback=False)
-        else:
-            fallback_context = "\n\n".join([
-                f"[Source: {doc.metadata.get('source', 'Unknown')}]\n{doc.page_content.strip()}"
-                for doc in docs
-            ])
-            messages = build_messages(user_input, fallback_context, profile, fallback=True)
+            for doc in docs[:5]
+        ]
+        messages = build_messages(user_input, top_chunks, profile, fallback=False)
 
         # --- Generate answer (now returns tuple) ---
-        draft_answer, source, page = generate_answer(messages, client, docs=docs, model=st.session_state.get("selected_model", "gpt-4o-mini"))
-        answer = revise_answer_with_gpt(user_input, draft_answer, client)
+        answer, source, page = generate_answer(messages, client, docs=docs, model=st.session_state.get("selected_model", "gpt-4o-mini"))
 
         # --- Stream answer ---
         streamed_response = ""
