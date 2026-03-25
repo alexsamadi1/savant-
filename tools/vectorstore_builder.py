@@ -191,10 +191,12 @@ def rebuild_vectorstore_from_s3():
 
     # Build and save BM25 index
     from rank_bm25 import BM25Okapi
-    bm25_corpus = [chunk.page_content.split() for chunk in chunks]
+    texts = [chunk.page_content for chunk in chunks]
+    metadatas = [chunk.metadata for chunk in chunks]
+    bm25_corpus = [t.split() for t in texts]
     bm25_obj = BM25Okapi(bm25_corpus)
     with open("faiss_index/bm25_index.pkl", "wb") as f:
-        pickle.dump({"index": bm25_obj, "docs": chunks}, f)
+        pickle.dump((bm25_obj, texts, metadatas), f)
     print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
 
     # Upload to S3
@@ -215,13 +217,13 @@ def get_relevant_chunks(query, vectorstore, k=20, bm25_index=None):
         if bm25_index is None:
             return faiss_results
 
-        bm25_obj = bm25_index["index"]
-        bm25_docs = bm25_index["docs"]
+        from langchain_core.documents import Document as LCDocument
+        bm25_obj, bm25_docs, bm25_metas = bm25_index if len(bm25_index) == 3 else (*bm25_index, [{} for _ in bm25_index[1]])
 
         tokenized_query = query.split()
         scores = bm25_obj.get_scores(tokenized_query)
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
-        bm25_results = [bm25_docs[i] for i in top_indices]
+        bm25_results = [LCDocument(page_content=bm25_docs[i], metadata=bm25_metas[i]) for i in top_indices]
 
         # Reciprocal Rank Fusion
         rrf_scores = {}
@@ -365,10 +367,12 @@ def rebuild_vectorstore_enriched():
 
     # Build and save BM25 index
     from rank_bm25 import BM25Okapi
-    bm25_corpus = [chunk.page_content.split() for chunk in all_chunks]
+    texts = [chunk.page_content for chunk in all_chunks]
+    metadatas = [chunk.metadata for chunk in all_chunks]
+    bm25_corpus = [t.split() for t in texts]
     bm25_obj = BM25Okapi(bm25_corpus)
     with open("faiss_index/bm25_index.pkl", "wb") as f:
-        pickle.dump({"index": bm25_obj, "docs": all_chunks}, f)
+        pickle.dump((bm25_obj, texts, metadatas), f)
     print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
 
     try:

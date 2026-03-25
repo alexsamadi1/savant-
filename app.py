@@ -452,8 +452,14 @@ with st.spinner("Searching documents..."):
 
         # --- Citation chip ---
         if source and source != "Unknown Document":
-            clean_source = source.replace("_", " ").replace("page", "").strip().title()
-            citation_label = f"📄 {clean_source} — Page {page}" if page else f"📄 {clean_source}"
+            clean_source = source.replace("_", " ").strip().title()
+            section_title = docs[0].metadata.get("section_title", "") if docs else ""
+            if section_title and section_title != "Introduction":
+                citation_label = f"📄 {clean_source} — {section_title}"
+            elif page:
+                citation_label = f"📄 {clean_source} — Page {page}"
+            else:
+                citation_label = f"📄 {clean_source}"
             st.markdown(f"<div class='citation-chip'>{citation_label}</div>", unsafe_allow_html=True)
         # --- Scroll to bottom ---
         st.markdown("<div id='bottom'></div>", unsafe_allow_html=True)
