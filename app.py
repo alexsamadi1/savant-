@@ -1,3 +1,15 @@
+import sentry_sdk
+try:
+    from tools.s3_utils import get_secret as _get_secret_init
+    sentry_sdk.init(
+        dsn=_get_secret_init("SENTRY_DSN"),
+        traces_sample_rate=0.1,
+        environment="production",
+    )
+    print("[SENTRY] Initialized successfully")
+except Exception as e:
+    print(f"[SENTRY] Not initialized: {e}")
+
 import streamlit as st
 from openai import OpenAI
 from tools.embeddings import load_faiss_vectorstore
@@ -518,6 +530,16 @@ with st.spinner("Searching documents..."):
                 st.markdown(f"<div class='citation-chip'>{label}</div>", unsafe_allow_html=True)
                 if len(seen_sources) >= 3:
                     break
+            # --- Feedback ---
+            feedback_key = f"feedback_{len(st.session_state.chat_history)}"
+            col1, col2, col3 = st.columns([1, 1, 10])
+            with col1:
+                if st.button("👍", key=f"{feedback_key}_up", help="Helpful answer"):
+                    print(f"[FEEDBACK] 👍 — {user_input[:80]}")
+            with col2:
+                if st.button("👎", key=f"{feedback_key}_down", help="Needs improvement"):
+                    print(f"[FEEDBACK] 👎 — {user_input[:80]}")
+
             # --- Scroll to bottom ---
             st.markdown("<div id='bottom'></div>", unsafe_allow_html=True)
             st.markdown("""
@@ -533,6 +555,7 @@ with st.spinner("Searching documents..."):
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
 
         except Exception as e:
+            sentry_sdk.capture_exception(e)
             print(f"[ERROR] Pipeline failure: {type(e).__name__}: {e}")
             error_msg = "⚠️ Something went wrong while generating your answer. Please try again."
             placeholder.markdown(
