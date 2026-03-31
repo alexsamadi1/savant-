@@ -24,6 +24,7 @@ __pycache__/
 
 # --- Eval results ---
 eval_results_*.csv
+savant_eval_set_v2.csv
 
 # --- Query logs ---
 query_logs.csvvenv/
