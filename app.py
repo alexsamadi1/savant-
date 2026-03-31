@@ -7,13 +7,14 @@ from tools.vectorstore_builder import rebuild_vectorstore_from_s3, get_relevant_
 from tools.log_utils import ensure_log_file_exists, log_chat_interaction
 from tools.analytics_dashboard import show_analytics_dashboard
 from tools.filename_generator import generate_smart_filename, extract_text_from_docx
-from logic.chat_logic import generate_answer, build_messages, check_grounding, GROUNDING_WARNING, rerank_chunks, rewrite_query
+from logic.chat_logic import generate_answer, generate_answer_streaming, build_messages, check_grounding, GROUNDING_WARNING, rerank_chunks, rewrite_query
 from config_loader import get_config
 from io import BytesIO
 from pathlib import Path
 import uuid
 import time
 import re
+import html
 import os
 import nltk
 
@@ -108,14 +109,19 @@ html, body, [class*="css"] {
 }
 
 .citation-chip {
-  display: inline-block;
-  font-size: 0.75rem;
-  background-color: #0d1f1e;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background-color: rgba(0, 201, 167, 0.1);
   color: #00C9A7;
-  border: 1px solid #00C9A7;
-  border-radius: 20px;
-  padding: 2px 10px;
-  margin-top: 6px;
+  border: 1px solid rgba(0, 201, 167, 0.4);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  letter-spacing: 0.01em;
 }
 
 [data-testid="stButton"] button {
@@ -273,10 +279,13 @@ if st.session_state.get("show_analytics", False):
 def get_vectorstore():
     try:
         return load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
+    except FileNotFoundError:
+        st.error("Knowledge base not found. Please contact your administrator.")
+        st.stop()
     except Exception as e:
-        st.warning(f"⚠️ Couldn't load vectorstore from S3. Rebuilding... ({e})")
-        rebuild_vectorstore_from_s3()
-        return load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
+        st.error("Could not load the knowledge base. Please try refreshing the page.")
+        print(f"[ERROR] Vectorstore load failed: {e}")
+        st.stop()
 
 vectorstore, bm25_index = get_vectorstore()
 
@@ -389,7 +398,8 @@ if not st.session_state.chat_history and "example_question" not in st.session_st
 for entry in st.session_state.chat_history:
     with st.chat_message(entry["role"]):
         bubble = "user-bubble" if entry["role"] == "user" else "bot-bubble"
-        st.markdown(f"<div class='chat-bubble {bubble}'>{entry['content']}</div>", unsafe_allow_html=True)
+        content = html.escape(entry['content']) if entry["role"] == "user" else entry['content']
+        st.markdown(f"<div class='chat-bubble {bubble}'>{content}</div>", unsafe_allow_html=True)
 
 # --- Handle User Input ---
 user_input = st.chat_input(assistant["chat_placeholder"])
@@ -400,7 +410,16 @@ if "example_question" in st.session_state and not user_input:
 if not user_input or not isinstance(user_input, str) or not user_input.strip():
     st.stop()
 
-st.chat_message("user").markdown(f"<div class='chat-bubble user-bubble'>{user_input}</div>", unsafe_allow_html=True)
+MAX_QUERY_LENGTH = 1000
+
+if user_input and len(user_input) > MAX_QUERY_LENGTH:
+    st.warning(f"Your question is too long ({len(user_input)} characters). Please keep it under {MAX_QUERY_LENGTH} characters.")
+    st.stop()
+
+if user_input:
+    user_input = " ".join(user_input.split())
+
+st.chat_message("user").markdown(f"<div class='chat-bubble user-bubble'>{html.escape(user_input)}</div>", unsafe_allow_html=True)
 st.session_state.chat_history.append({"role": "user", "content": user_input})
 
 # --- Generate Response ---
@@ -412,78 +431,112 @@ with st.spinner("Searching documents..."):
             unsafe_allow_html=True
         )
 
-        rewritten = rewrite_query(user_input, client)
-        docs = get_relevant_chunks(rewritten, vectorstore, k=20, bm25_index=bm25_index)
+        try:
+            start_time = time.time()
+            rewritten = rewrite_query(user_input, client)
+            docs = get_relevant_chunks(rewritten, vectorstore, k=20, bm25_index=bm25_index)
 
-        if not docs:
-            answer = assistant["fallback_message"]
-            placeholder.markdown(f"<div class='chat-bubble bot-bubble'>{answer}</div>", unsafe_allow_html=True)
-            st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="summary")
-            st.stop()
+            if not docs:
+                answer = assistant["fallback_message"]
+                placeholder.markdown(f"<div class='chat-bubble bot-bubble'>⚠️ {answer}</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div style='font-size: 0.8rem; color: #666; margin-top: 4px; padding-left: 8px;'>"
+                    "💡 Tip: If you think this should be covered, let your admin know — they can upload the relevant document.</div>",
+                    unsafe_allow_html=True
+                )
+                st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="fallback")
+                st.stop()
 
-        ranked = rerank_chunks(rewritten, docs[:10])
-        top_chunks = [
-            {
-                "text": doc.page_content,
-                "source": doc.metadata.get("source"),
-                "page": doc.metadata.get("page")
-            }
-            for doc in ranked[:5]
-        ]
-        messages = build_messages(rewritten, top_chunks, profile, fallback=False)
+            ranked = rerank_chunks(rewritten, docs[:10])
+            top_chunks = [
+                {
+                    "text": doc.page_content,
+                    "source": doc.metadata.get("source"),
+                    "page": doc.metadata.get("page")
+                }
+                for doc in ranked[:5]
+            ]
+            messages = build_messages(rewritten, top_chunks, profile, fallback=False)
 
-        # --- Generate answer (now returns tuple) ---
-        answer, source, page = generate_answer(messages, client, docs=ranked, model=st.session_state.get("selected_model", "gpt-4o-mini"))
+            # --- Stream answer ---
+            stream_gen, source, page = generate_answer_streaming(
+                messages, client, docs=ranked,
+                model=st.session_state.get("selected_model", "gpt-4o-mini")
+            )
 
-        # --- Grounding check ---
-        fallback_phrases = [
-            "do not include", "do not contain", "does not include", "does not contain",
-            "couldn't find", "cannot find", "no specific", "not specifically",
-            "not mentioned", "provided excerpts", "excerpts provided"
-        ]
-        if not any(phrase in answer.lower() for phrase in fallback_phrases):
-            is_grounded = check_grounding(answer, top_chunks, client)
-            if not is_grounded:
-                answer += GROUNDING_WARNING
+            streamed_response = ""
+            for token in stream_gen:
+                streamed_response += token
+                placeholder.markdown(
+                    f"<div class='chat-bubble bot-bubble'>{streamed_response}▌</div>",
+                    unsafe_allow_html=True
+                )
 
-        # --- Stream answer ---
-        streamed_response = ""
-        for i, char in enumerate(answer):
-            streamed_response += char
-            cursor = "▌" if i % 2 == 0 else ""
+            answer = streamed_response
+
+            # Final render without cursor
             placeholder.markdown(
-                f"<div class='chat-bubble bot-bubble'>{streamed_response}{cursor}</div>",
+                f"<div class='chat-bubble bot-bubble'>{answer}</div>",
                 unsafe_allow_html=True
             )
-            time.sleep(0.008)
 
-        placeholder.markdown(
-            f"<div class='chat-bubble bot-bubble'>{answer}</div>",
-            unsafe_allow_html=True
-        )
+            latency = round(time.time() - start_time, 2)
+            print(f"[LATENCY] {latency}s — {user_input[:80]}")
 
-        # --- Citation chip ---
-        if source and source != "Unknown Document":
-            clean_source = source.replace("_", " ").strip().title()
-            section_title = ranked[0].metadata.get("section_title", "") if ranked else ""
-            if section_title and section_title != "Introduction":
-                citation_label = f"📄 {clean_source} — {section_title}"
-            elif page:
-                citation_label = f"📄 {clean_source} — Page {page}"
-            else:
-                citation_label = f"📄 {clean_source}"
-            st.markdown(f"<div class='citation-chip'>{citation_label}</div>", unsafe_allow_html=True)
-        # --- Scroll to bottom ---
-        st.markdown("<div id='bottom'></div>", unsafe_allow_html=True)
-        st.markdown("""
-            <script>
-                const bottom = document.getElementById("bottom");
-                if (bottom) bottom.scrollIntoView({behavior: "smooth"});
-            </script>
-        """, unsafe_allow_html=True) 
-        # --- Log ---
-        source_titles = [doc.metadata.get("source", "unknown") for doc in docs]
-        log_chat_interaction(user_input, answer, profile, source_titles, fallback=False, response_type="direct")
+            # --- Grounding check ---
+            fallback_phrases = [
+                "do not include", "do not contain", "does not include", "does not contain",
+                "couldn't find", "cannot find", "no specific", "not specifically",
+                "not mentioned", "provided excerpts", "excerpts provided"
+            ]
+            if not any(phrase in answer.lower() for phrase in fallback_phrases):
+                is_grounded = check_grounding(answer, top_chunks, client)
+                if not is_grounded:
+                    answer += GROUNDING_WARNING
+                    placeholder.markdown(
+                        f"<div class='chat-bubble bot-bubble'>{answer}</div>",
+                        unsafe_allow_html=True
+                    )
 
-        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            # --- Citation chips (up to 3 deduplicated sources) ---
+            seen_sources = set()
+            for doc in ranked[:5]:
+                src = doc.metadata.get("source", "Unknown Document")
+                section = doc.metadata.get("section_title", "")
+                pg = doc.metadata.get("page")
+                if src == "Unknown Document" or src in seen_sources:
+                    continue
+                seen_sources.add(src)
+                clean_src = src.replace("_", " ").strip().title()
+                if section and section != "Introduction":
+                    label = f"📄 {clean_src} — {section}"
+                elif pg:
+                    label = f"📄 {clean_src} — Page {pg}"
+                else:
+                    label = f"📄 {clean_src}"
+                st.markdown(f"<div class='citation-chip'>{label}</div>", unsafe_allow_html=True)
+                if len(seen_sources) >= 3:
+                    break
+            # --- Scroll to bottom ---
+            st.markdown("<div id='bottom'></div>", unsafe_allow_html=True)
+            st.markdown("""
+                <script>
+                    const bottom = document.getElementById("bottom");
+                    if (bottom) bottom.scrollIntoView({behavior: "smooth"});
+                </script>
+            """, unsafe_allow_html=True)
+            # --- Log ---
+            source_titles = [doc.metadata.get("source", "unknown") for doc in docs]
+            log_chat_interaction(user_input, answer, profile, source_titles, fallback=False, response_type="direct")
+
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+        except Exception as e:
+            print(f"[ERROR] Pipeline failure: {type(e).__name__}: {e}")
+            error_msg = "⚠️ Something went wrong while generating your answer. Please try again."
+            placeholder.markdown(
+                f"<div class='chat-bubble bot-bubble'>{error_msg}</div>",
+                unsafe_allow_html=True
+            )
+            st.session_state.chat_history.append({"role": "assistant", "content": error_msg})

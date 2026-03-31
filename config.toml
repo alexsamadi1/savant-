@@ -26,7 +26,7 @@ sample_questions = [
     "How do I submit a request?",
     "Where can I find the policy on X?"
 ]
-fallback_message = "I couldn't find a strong match in the documents. Please try rephrasing or contact your administrator."
+fallback_message = "I wasn't able to find a confident answer in your organization's documents. This question has been flagged as a potential documentation gap for your admin to review."
 chat_placeholder = "Ask me anything about your organization's knowledge base..."
 
 [storage]

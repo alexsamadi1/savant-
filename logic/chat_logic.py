@@ -174,6 +174,35 @@ def generate_answer(messages, client, docs=None, model: str = "gpt-4o-mini") -> 
     except Exception as e:
         return f"Failed to generate answer: {e}", source, page
     
+def generate_answer_streaming(messages, client, docs=None, model="gpt-4o-mini"):
+    """
+    Call OpenAI with stream=True and return (chunk_generator, source, page).
+    The generator yields text strings as they arrive.
+    """
+    source = "Unknown Document"
+    page = None
+
+    if docs and len(docs) > 0:
+        source = docs[0].metadata.get("source", "Unknown Document")
+        page = docs[0].metadata.get("page", None)
+
+    try:
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True
+        )
+        def chunk_generator():
+            for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield delta.content
+        return chunk_generator(), source, page
+    except Exception as e:
+        def error_gen():
+            yield f"Failed to generate answer: {e}"
+        return error_gen(), source, page
+
 def build_messages(user_input, context_chunk, profile, fallback=False):
     role = profile.get("role", "employee")
     tenure = profile.get("tenure", "unknown tenure")
