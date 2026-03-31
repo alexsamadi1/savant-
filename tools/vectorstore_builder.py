@@ -53,7 +53,7 @@ def build_vectorstore(
     print("🔍 Checking for existing FAISS index...")
     index_file = Path(index_path) / "index.faiss"
 
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
 
     if index_file.exists():
         print(f"✅ Existing vectorstore found at '{index_path}/'. Loading...")
@@ -114,7 +114,7 @@ def rebuild_vectorstore_from_docs(docs_path="docs", faiss_path="faiss_index"):
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(all_docs)
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
 
     faiss_path = "faiss_index/index"
     vectorstore = FAISS.from_documents(chunks, embeddings)
@@ -203,7 +203,7 @@ def rebuild_vectorstore_from_s3():
     print(f"🔬 Created {len(chunks)} chunks from {doc_count} documents")
 
     # Embed
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
     vectorstore = FAISS.from_documents(chunks, embeddings)
 
     # Save locally to the correct location
@@ -222,7 +222,7 @@ def rebuild_vectorstore_from_s3():
     print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
 
     # Write manifest
-    manifest = {"embedding_model": "text-embedding-3-small", "created_at": datetime.now().isoformat()}
+    manifest = {"embedding_model": "text-embedding-ada-002", "created_at": datetime.now().isoformat()}
     with open("faiss_index/manifest.json", "w") as f:
         json.dump(manifest, f)
 
@@ -386,7 +386,7 @@ def rebuild_vectorstore_enriched():
 
     all_chunks = add_contextual_embeddings(all_chunks, get_openai_api_key())
 
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
     vectorstore = FAISS.from_documents(all_chunks, embeddings)
 
     os.makedirs("faiss_index", exist_ok=True)
@@ -404,7 +404,7 @@ def rebuild_vectorstore_enriched():
     print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
 
     # Write manifest
-    manifest = {"embedding_model": "text-embedding-3-small", "created_at": datetime.now().isoformat()}
+    manifest = {"embedding_model": "text-embedding-ada-002", "created_at": datetime.now().isoformat()}
     with open("faiss_index/manifest.json", "w") as f:
         json.dump(manifest, f)
 

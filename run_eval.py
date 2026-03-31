@@ -88,7 +88,7 @@ except ImportError as e:
     sys.exit(1)
  
 try:
-    from logic.chat_logic import rerank_with_gpt, build_messages, generate_answer
+    from logic.chat_logic import rerank_chunks, rewrite_query, build_messages, generate_answer
     print("chat_logic imported")
 except ImportError as e:
     print(f"ERROR: {e}")
@@ -142,8 +142,11 @@ def load_pipeline():
 def run_query(question: str, client, vectorstore, bm25_index, cfg) -> dict:
     start = time.time()
  
-    # Step 1: Retrieve
-    docs = get_relevant_chunks(question, vectorstore, k=K_RETRIEVAL, bm25_index=bm25_index)
+    # Step 1: Rewrite query
+    rewritten = rewrite_query(question, client)
+
+    # Step 2: Retrieve
+    docs = get_relevant_chunks(rewritten, vectorstore, k=K_RETRIEVAL, bm25_index=bm25_index)
  
     if not docs:
         latency = round(time.time() - start, 2)
@@ -156,31 +159,30 @@ def run_query(question: str, client, vectorstore, bm25_index, cfg) -> dict:
             "rerank_hit": False,
         }
  
-    # Step 2: Rerank top 3
-    chunks = docs[:3]
-    reranked_chunk = rerank_with_gpt(question, chunks, client)
-    rerank_hit = bool(reranked_chunk)
+    # Step 3: Rerank top 10
+    ranked = rerank_chunks(rewritten, docs[:10])
+    rerank_hit = len(ranked) > 0
  
-    # Step 3: Build messages — pass list of top 5 chunks (matches app.py)
+    # Step 4: Build messages — pass list of top 5 chunks (matches app.py)
     top_chunks = [
         {
             "text": doc.page_content,
             "source": doc.metadata.get("source"),
             "page": doc.metadata.get("page")
         }
-        for doc in docs[:5]
+        for doc in ranked[:5]
     ]
     profile = {"role": "Evaluator", "tenure": "N/A"}
-    messages = build_messages(question, top_chunks, profile, fallback=False)
+    messages = build_messages(rewritten, top_chunks, profile, fallback=False)
  
-    # Step 4: Generate
+    # Step 5: Generate
     model = cfg["models"]["default"]
-    answer, source, page = generate_answer(messages, client, docs=docs, model=model)
+    answer, source, page = generate_answer(messages, client, docs=ranked, model=model)
  
     latency = round(time.time() - start, 2)
  
-    # Step 5: Build citation (matches app.py logic)
-    section_title = docs[0].metadata.get("section_title", "") if docs else ""
+    # Step 6: Build citation (matches app.py logic)
+    section_title = ranked[0].metadata.get("section_title", "") if ranked else ""
     clean_source = (source or "unknown").replace("_", " ").strip().title()
     if section_title and section_title != "Introduction":
         citation = f"{clean_source} — {section_title}"

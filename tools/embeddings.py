@@ -61,11 +61,11 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
     if manifest_file.exists():
         with open(manifest_file) as f:
             manifest = json.load(f)
-        if manifest.get("embedding_model") != "text-embedding-3-small":
-            print(f"⚠️ WARNING: Index was built with {manifest.get('embedding_model')} but current model is text-embedding-3-small. Rebuild required.")
+        if manifest.get("embedding_model") != "text-embedding-ada-002":
+            print(f"⚠️ WARNING: Index was built with {manifest.get('embedding_model')} but current model is text-embedding-ada-002. Rebuild required.")
 
     # Load FAISS from local files
-    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
     faiss_vectorstore = FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
 
     # Load BM25 index if present
@@ -93,7 +93,7 @@ def build_combined_vectorstore(pdf_path: str, docx_path: str, index_path: str, a
     all_chunks = pdf_chunks + docx_chunks
     print(f"✅ Total chunks: {len(all_chunks)}")
 
-    embeddings = OpenAIEmbeddings(openai_api_key=api_key, model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(openai_api_key=api_key)
     vectorstore = FAISS.from_documents(all_chunks, embeddings)
     vectorstore.save_local(index_path)
     print(f"✅ Vectorstore saved to: {index_path}/")
