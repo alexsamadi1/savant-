@@ -1,4 +1,5 @@
 import os
+import json
 import pickle
 from pathlib import Path
 from dotenv import load_dotenv
@@ -43,6 +44,11 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
             s3.download_file(bucket, "bm25_index.pkl", str(bm25_file))
         except Exception:
             pass  # BM25 index may not exist yet (pre-hybrid rebuild)
+        manifest_file = path / "manifest.json"
+        try:
+            s3.download_file(bucket, "manifest.json", str(manifest_file))
+        except Exception:
+            pass  # Manifest may not exist yet (pre-pinning rebuild)
         print("✅ Successfully loaded FAISS index from S3")
 
     except botocore.exceptions.BotoCoreError as e:
@@ -50,8 +56,16 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
         if not faiss_file.exists() or not pkl_file.exists():
             raise FileNotFoundError("❌ No local index found either. Cannot load vectorstore.")
 
+    # Check manifest for embedding model compatibility
+    manifest_file = path / "manifest.json"
+    if manifest_file.exists():
+        with open(manifest_file) as f:
+            manifest = json.load(f)
+        if manifest.get("embedding_model") != "text-embedding-3-small":
+            print(f"⚠️ WARNING: Index was built with {manifest.get('embedding_model')} but current model is text-embedding-3-small. Rebuild required.")
+
     # Load FAISS from local files
-    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-small")
     faiss_vectorstore = FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
 
     # Load BM25 index if present
@@ -79,7 +93,7 @@ def build_combined_vectorstore(pdf_path: str, docx_path: str, index_path: str, a
     all_chunks = pdf_chunks + docx_chunks
     print(f"✅ Total chunks: {len(all_chunks)}")
 
-    embeddings = OpenAIEmbeddings(openai_api_key=api_key)
+    embeddings = OpenAIEmbeddings(openai_api_key=api_key, model="text-embedding-3-small")
     vectorstore = FAISS.from_documents(all_chunks, embeddings)
     vectorstore.save_local(index_path)
     print(f"✅ Vectorstore saved to: {index_path}/")

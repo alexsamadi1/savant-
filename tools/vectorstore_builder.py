@@ -12,6 +12,7 @@ import json
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from tools.s3_utils import get_secret
+from datetime import datetime
 import nltk
 from nltk.stem import PorterStemmer
 
@@ -52,7 +53,7 @@ def build_vectorstore(
     print("🔍 Checking for existing FAISS index...")
     index_file = Path(index_path) / "index.faiss"
 
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
 
     if index_file.exists():
         print(f"✅ Existing vectorstore found at '{index_path}/'. Loading...")
@@ -113,7 +114,7 @@ def rebuild_vectorstore_from_docs(docs_path="docs", faiss_path="faiss_index"):
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_documents(all_docs)
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
 
     faiss_path = "faiss_index/index"
     vectorstore = FAISS.from_documents(chunks, embeddings)
@@ -202,7 +203,7 @@ def rebuild_vectorstore_from_s3():
     print(f"🔬 Created {len(chunks)} chunks from {doc_count} documents")
 
     # Embed
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
     vectorstore = FAISS.from_documents(chunks, embeddings)
 
     # Save locally to the correct location
@@ -220,11 +221,17 @@ def rebuild_vectorstore_from_s3():
         pickle.dump((bm25_obj, texts, metadatas), f)
     print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
 
+    # Write manifest
+    manifest = {"embedding_model": "text-embedding-3-small", "created_at": datetime.now().isoformat()}
+    with open("faiss_index/manifest.json", "w") as f:
+        json.dump(manifest, f)
+
     # Upload to S3
     try:
         s3.upload_file("faiss_index/index.faiss", index_bucket, "index.faiss")
         s3.upload_file("faiss_index/index.pkl", index_bucket, "index.pkl")
         s3.upload_file("faiss_index/bm25_index.pkl", index_bucket, "bm25_index.pkl")
+        s3.upload_file("faiss_index/manifest.json", index_bucket, "manifest.json")
         print("☁️ Uploaded new index to S3")
     except Exception as e:
         print(f"⚠️ Could not upload index to S3: {e}")
@@ -379,7 +386,7 @@ def rebuild_vectorstore_enriched():
 
     all_chunks = add_contextual_embeddings(all_chunks, get_openai_api_key())
 
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
+    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key(), model="text-embedding-3-small")
     vectorstore = FAISS.from_documents(all_chunks, embeddings)
 
     os.makedirs("faiss_index", exist_ok=True)
@@ -396,10 +403,16 @@ def rebuild_vectorstore_enriched():
         pickle.dump((bm25_obj, texts, metadatas), f)
     print("💾 Saved BM25 index locally to faiss_index/bm25_index.pkl")
 
+    # Write manifest
+    manifest = {"embedding_model": "text-embedding-3-small", "created_at": datetime.now().isoformat()}
+    with open("faiss_index/manifest.json", "w") as f:
+        json.dump(manifest, f)
+
     try:
         s3.upload_file("faiss_index/index.faiss", index_bucket, "index.faiss")
         s3.upload_file("faiss_index/index.pkl", index_bucket, "index.pkl")
         s3.upload_file("faiss_index/bm25_index.pkl", index_bucket, "bm25_index.pkl")
+        s3.upload_file("faiss_index/manifest.json", index_bucket, "manifest.json")
         print("☁️ Uploaded new index to S3")
     except Exception as e:
         print(f"⚠️ Could not upload to S3: {e}")
