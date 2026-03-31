@@ -7,7 +7,7 @@ from tools.vectorstore_builder import rebuild_vectorstore_from_s3, get_relevant_
 from tools.log_utils import ensure_log_file_exists, log_chat_interaction
 from tools.analytics_dashboard import show_analytics_dashboard
 from tools.filename_generator import generate_smart_filename, extract_text_from_docx
-from logic.chat_logic import generate_answer, build_messages
+from logic.chat_logic import generate_answer, build_messages, check_grounding, GROUNDING_WARNING, rerank_chunks, rewrite_query
 from config_loader import get_config
 from io import BytesIO
 from pathlib import Path
@@ -412,7 +412,8 @@ with st.spinner("Searching documents..."):
             unsafe_allow_html=True
         )
 
-        docs = get_relevant_chunks(user_input, vectorstore, k=20, bm25_index=bm25_index)
+        rewritten = rewrite_query(user_input, client)
+        docs = get_relevant_chunks(rewritten, vectorstore, k=20, bm25_index=bm25_index)
 
         if not docs:
             answer = assistant["fallback_message"]
@@ -421,18 +422,30 @@ with st.spinner("Searching documents..."):
             log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="summary")
             st.stop()
 
+        ranked = rerank_chunks(rewritten, docs[:10])
         top_chunks = [
             {
                 "text": doc.page_content,
                 "source": doc.metadata.get("source"),
                 "page": doc.metadata.get("page")
             }
-            for doc in docs[:5]
+            for doc in ranked[:5]
         ]
-        messages = build_messages(user_input, top_chunks, profile, fallback=False)
+        messages = build_messages(rewritten, top_chunks, profile, fallback=False)
 
         # --- Generate answer (now returns tuple) ---
-        answer, source, page = generate_answer(messages, client, docs=docs, model=st.session_state.get("selected_model", "gpt-4o-mini"))
+        answer, source, page = generate_answer(messages, client, docs=ranked, model=st.session_state.get("selected_model", "gpt-4o-mini"))
+
+        # --- Grounding check ---
+        fallback_phrases = [
+            "do not include", "do not contain", "does not include", "does not contain",
+            "couldn't find", "cannot find", "no specific", "not specifically",
+            "not mentioned", "provided excerpts", "excerpts provided"
+        ]
+        if not any(phrase in answer.lower() for phrase in fallback_phrases):
+            is_grounded = check_grounding(answer, top_chunks, client)
+            if not is_grounded:
+                answer += GROUNDING_WARNING
 
         # --- Stream answer ---
         streamed_response = ""
@@ -453,7 +466,7 @@ with st.spinner("Searching documents..."):
         # --- Citation chip ---
         if source and source != "Unknown Document":
             clean_source = source.replace("_", " ").strip().title()
-            section_title = docs[0].metadata.get("section_title", "") if docs else ""
+            section_title = ranked[0].metadata.get("section_title", "") if ranked else ""
             if section_title and section_title != "Introduction":
                 citation_label = f"📄 {clean_source} — {section_title}"
             elif page:

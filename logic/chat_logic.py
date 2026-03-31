@@ -1,60 +1,47 @@
 import time
+from datetime import datetime
 from openai import OpenAI
 from typing import List, Tuple, Optional
 from langchain_core.documents import Document
 from config_loader import get_config
+from sentence_transformers import CrossEncoder
+import numpy as np
 
-# --- Rerank using GPT ---
-def rerank_with_gpt(query, chunks, client: OpenAI, model: str = "gpt-4o-mini") -> Optional[str]:
-    if not chunks:
-        return None
+_cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 
-    context_snippets = "\n\n".join([
-        f"Chunk {i+1} (Source: {chunk.metadata.get('source', 'unknown')}):\n{chunk.page_content[:600]}"
-        for i, chunk in enumerate(chunks)
-    ])
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are selecting the single best chunk to answer a user's question.\n\n"
-                "Instructions:\n"
-                "- Read the question carefully\n"
-                "- Read each chunk carefully\n"
-                "- Select the chunk whose content most directly answers the question\n"
-                "- Chunk 1 should be selected if it contains relevant information — do not skip it\n"
-                "- Respond with ONLY the number of the best chunk, e.g. '1' or '2'\n"
-                "- If truly no chunk answers the question, respond with '0'\n"
-                "- Nothing else — just the number"
-            )
-        },
-        {
-            "role": "user",
-            "content": f"Question: {query}\n\nChunks:\n{context_snippets}"
-        }
-    ]
-
+# --- Query Rewriting ---
+def rewrite_query(user_input: str, client: OpenAI) -> str:
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=messages,
-            temperature=0
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a search query optimizer for a GovCon knowledge base. "
+                        "Rewrite the user's question into a precise search query that will retrieve the most relevant document chunks. "
+                        "Expand acronyms where helpful (e.g. PTO → paid time off PTO, CUI → controlled unclassified information CUI). "
+                        "Remove conversational filler. Return only the rewritten query, nothing else."
+                    )
+                },
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0,
+            max_tokens=60
         )
-        content = response.choices[0].message.content.strip()
-
-        import re
-        match = re.search(r'\d+', content)
-        if match:
-            chunk_index = int(match.group()) - 1
-            if chunk_index < 0:
-                return None
-            if 0 <= chunk_index < len(chunks):
-                return chunks[chunk_index].page_content
-        return None
-
+        rewritten = response.choices[0].message.content.strip()
+        return rewritten if rewritten else user_input
     except Exception:
-        return None
+        return user_input
+
+# --- Rerank using Cross-Encoder ---
+def rerank_chunks(query: str, chunks: List[Document]) -> List[Document]:
+    if not chunks:
+        return []
+    pairs = [[query, chunk.page_content[:512]] for chunk in chunks]
+    scores = _cross_encoder.predict(pairs)
+    ranked_indices = np.argsort(scores)[::-1]
+    return [chunks[i] for i in ranked_indices]
 # --- Fallback Summarization ---
 def summarize_fallback(query, chunks: List[Document], client: OpenAI) -> str:
     fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in chunks[:3]])
@@ -134,22 +121,22 @@ def generate_response(
     """
     Returns: (final_answer, source_title)
     """
-    chunks = docs[:3]
-    reranked = rerank_with_gpt(query, chunks, client)
+    ranked = rerank_chunks(query, docs[:3])
 
-    if reranked:
+    if ranked:
+        context = "\n\n".join([chunk.page_content[:500] for chunk in ranked])
         system_prompt = (
             f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {user_profile['role']} "
             f"with {user_profile['tenure']} at the company.\n\n"
-            "Your job is to clearly answer the user's question using the excerpt from internal documentation provided. "
+            "Your job is to clearly answer the user's question using the excerpts from internal documentation provided. "
             "If you're unsure, advise the user to contact their administrator."
         )
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"User question: {query}\n\nRelevant excerpt:\n{reranked}"}
+            {"role": "user", "content": f"User question: {query}\n\nRelevant excerpts:\n{context}"}
         ]
     else:
-        fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in chunks])
+        fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in docs[:3]])
         messages = [
             {"role": "system", "content": (
                 f"You are a helpful knowledge assistant trained on {get_config()['brand']['company_name']} internal documentation. The question wasn't answered clearly by any one excerpt, "
@@ -191,26 +178,35 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
     role = profile.get("role", "employee")
     tenure = profile.get("tenure", "unknown tenure")
 
+    company = get_config()['brand']['company_name']
+    today = datetime.now().strftime('%B %d, %Y')
+
     if fallback:
+        system_prompt = (
+            f"You are a helpful knowledge assistant trained on {company} internal documentation. "
+            f"The user is a {role} with {tenure} at the company. "
+            f"Today's date is {today}.\n\n"
+            "The question wasn't answered clearly by any one excerpt, but partial context is provided. "
+            "Summarize a helpful answer based on what you can. "
+            "If unsure, advise the user to contact their administrator."
+        )
         return [
-            {
-                "role": "system",
-                "content": (
-                    f"You are a helpful knowledge assistant trained on {get_config()['brand']['company_name']} internal documentation. "
-                    "The question wasn't answered clearly by any one excerpt, but here are some partial chunks. "
-                    "Summarize a helpful answer based on what you can.\n"
-                    "If unsure, advise the user to contact their administrator."
-                )
-            },
+            {"role": "system", "content": system_prompt},
             {
                 "role": "user",
-                "content": (
-                    f"User question: {user_input}\n\n"
-                    f"Context snippets:\n{context_chunk}"
-                )
+                "content": f"<context>\n{context_chunk}\n</context>\n\nQuestion: {user_input}"
             }
         ]
     else:
+        system_prompt = (
+            f"You are {company}'s knowledge assistant. The user is a {role} "
+            f"with {tenure} at the company. "
+            f"Today's date is {today}.\n\n"
+            "Your job is to synthesize a clear, accurate answer using the provided context from internal documentation. "
+            "If excerpts cover different aspects of the question, combine them into one cohesive answer. "
+            "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
+        )
+
         if isinstance(context_chunk, list):
             parts = []
             for i, chunk in enumerate(context_chunk):
@@ -218,52 +214,68 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
                 page = chunk.get("page")
                 header = f"[Excerpt {i+1} from {source}, page {page}]" if page else f"[Excerpt {i+1} from {source}]"
                 parts.append(f"{header}\n{chunk['text']}")
-            combined_text = "\n\n---\n\n".join(parts)
-
-            return [
-                {
-                    "role": "system",
-                    "content": (
-                        f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {role} "
-                        f"with {tenure} at the company.\n\n"
-                        "Your job is to synthesize a clear, accurate answer using the excerpts from internal documentation provided. "
-                        "If excerpts cover different aspects of the question, combine them into one cohesive answer. "
-                        "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"User question: {user_input}\n\n"
-                        f"Relevant excerpts:\n\n{combined_text}"
-                    )
-                }
-            ]
+            context_text = "\n\n---\n\n".join(parts)
         else:
             source = context_chunk.get("source", "Unknown Document")
             page = context_chunk.get("page")
             source_citation = f"{source}, page {page}" if page else source
+            context_text = f"[Excerpt from {source_citation}]\n{context_chunk['text']}"
 
-            return [
-                {
-                    "role": "system",
-                    "content": (
-                        f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {role} "
-                        f"with {tenure} at the company.\n\n"
-                        "Your job is to synthesize a clear, accurate answer using the excerpts from internal documentation provided. "
-                        "If excerpts cover different aspects of the question, combine them into one cohesive answer. "
-                        "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"User question: {user_input}\n\n"
-                        f"Relevant excerpts:\n\n[Excerpt from {source_citation}]\n{context_chunk['text']}"
-                    )
-                }
-            ]
+        return [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": f"<context>\n{context_text}\n</context>\n\nQuestion: {user_input}"
+            }
+        ]
     
+def check_grounding(answer: str, chunks: list, client: OpenAI) -> bool:
+    """
+    Check if the answer is grounded in the provided chunks.
+    Returns True if grounded, False if ungrounded claims detected.
+    """
+    context = "\n\n".join([
+        f"Chunk {i+1}:\n{c['text'][:800]}"
+        for i, c in enumerate(chunks)
+    ])
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a strict grounding auditor. You will be given an answer and the source context chunks it was based on. "
+                "Your job is to determine whether the answer contains ANY claims, facts, numbers, or policies that are NOT present in the provided context. "
+                "Respond with ONLY 'yes' if ALL claims in the answer are supported by the context, or 'no' if any claim is not grounded in the context. "
+                "Nothing else — just 'yes' or 'no'."
+            )
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Answer to audit:\n{answer}\n\n"
+                f"Source context:\n{context}"
+            )
+        }
+    ]
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0
+        )
+        result = response.choices[0].message.content.strip().lower()
+        return result == "yes"
+    except Exception:
+        return True  # If check fails, don't flag — fail open
+
+
+GROUNDING_WARNING = (
+    "\n\n---\n*Note: I couldn't verify all parts of this answer against your documents — "
+    "please confirm with your administrator.*"
+)
+
+
 def suggest_follow_ups(user_question, answer, client: OpenAI) -> list:
     prompt = (
         f"Based on the following user question and assistant answer, suggest 2 to 3 helpful follow-up questions "

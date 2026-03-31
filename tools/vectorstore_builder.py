@@ -12,6 +12,27 @@ import json
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from tools.s3_utils import get_secret
+import nltk
+from nltk.stem import PorterStemmer
+
+_stemmer = PorterStemmer()
+
+def tokenize_for_bm25(text: str) -> list:
+    nltk.download('stopwords', quiet=True)
+    nltk.download('punkt', quiet=True)
+    from nltk.corpus import stopwords
+    stop_words = set(stopwords.words('english'))
+    raw_tokens = text.split()
+    result = []
+    for raw in raw_tokens:
+        lower = raw.lower()
+        if lower in stop_words:
+            continue
+        if 2 <= len(raw) <= 5 and raw.isupper():
+            result.append(lower)
+        else:
+            result.append(_stemmer.stem(lower))
+    return result
 
 # --- Load API Key ---
 def get_openai_api_key():
@@ -193,7 +214,7 @@ def rebuild_vectorstore_from_s3():
     from rank_bm25 import BM25Okapi
     texts = [chunk.page_content for chunk in chunks]
     metadatas = [chunk.metadata for chunk in chunks]
-    bm25_corpus = [t.split() for t in texts]
+    bm25_corpus = [tokenize_for_bm25(t) for t in texts]
     bm25_obj = BM25Okapi(bm25_corpus)
     with open("faiss_index/bm25_index.pkl", "wb") as f:
         pickle.dump((bm25_obj, texts, metadatas), f)
@@ -220,7 +241,7 @@ def get_relevant_chunks(query, vectorstore, k=20, bm25_index=None):
         from langchain_core.documents import Document as LCDocument
         bm25_obj, bm25_docs, bm25_metas = bm25_index if len(bm25_index) == 3 else (*bm25_index, [{} for _ in bm25_index[1]])
 
-        tokenized_query = query.split()
+        tokenized_query = tokenize_for_bm25(query)
         scores = bm25_obj.get_scores(tokenized_query)
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
         bm25_results = [LCDocument(page_content=bm25_docs[i], metadata=bm25_metas[i]) for i in top_indices]
@@ -230,12 +251,12 @@ def get_relevant_chunks(query, vectorstore, k=20, bm25_index=None):
         doc_map = {}
 
         for rank, doc in enumerate(faiss_results):
-            key = doc.page_content[:200]
+            key = hashlib.md5((doc.page_content + doc.metadata.get('source', '')).encode()).hexdigest()
             rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (rank + 60)
             doc_map[key] = doc
 
         for rank, doc in enumerate(bm25_results):
-            key = doc.page_content[:200]
+            key = hashlib.md5((doc.page_content + doc.metadata.get('source', '')).encode()).hexdigest()
             rrf_scores[key] = rrf_scores.get(key, 0) + 1 / (rank + 60)
             doc_map[key] = doc
 
@@ -258,9 +279,9 @@ def add_contextual_embeddings(chunks, api_key):
                     {
                         "role": "system",
                         "content": (
-                            "You are a document indexing assistant. Your job is to write a single short sentence "
-                            "(max 20 words) that situates this chunk within its source document. Be specific about "
-                            "what document and section this is from."
+                            "You are a document indexing assistant. Your job is to situate this chunk within its source document. "
+                            "Write exactly 2 sentences. Sentence 1: describe what document and specific section this chunk comes from. "
+                            "Sentence 2: describe what specific information, policy, or procedure this chunk contains."
                         )
                     },
                     {
@@ -269,7 +290,7 @@ def add_contextual_embeddings(chunks, api_key):
                             f"Document source: {chunk.metadata.get('source', 'unknown')}\n"
                             f"Section: {chunk.metadata.get('section_title', 'unknown')}\n"
                             f"Chunk content: {chunk.page_content[:500]}\n\n"
-                            "Write one sentence describing what document and section this chunk comes from."
+                            "Write exactly 2 sentences as instructed."
                         )
                     }
                 ],
@@ -369,7 +390,7 @@ def rebuild_vectorstore_enriched():
     from rank_bm25 import BM25Okapi
     texts = [chunk.page_content for chunk in all_chunks]
     metadatas = [chunk.metadata for chunk in all_chunks]
-    bm25_corpus = [t.split() for t in texts]
+    bm25_corpus = [tokenize_for_bm25(t) for t in texts]
     bm25_obj = BM25Okapi(bm25_corpus)
     with open("faiss_index/bm25_index.pkl", "wb") as f:
         pickle.dump((bm25_obj, texts, metadatas), f)

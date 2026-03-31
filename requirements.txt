@@ -16,3 +16,4 @@ toml
 unstructured==0.11.0
 watchdog
 rank_bm25
+sentence-transformers

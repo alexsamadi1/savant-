@@ -22,6 +22,9 @@ __pycache__/
 .vscode/
 *.code-workspace
 
+# --- Eval results ---
+eval_results_*.csv
+
 # --- Query logs ---
 query_logs.csvvenv/
 test_chat.py
