@@ -62,6 +62,30 @@ def chunk_docx_with_metadata(docx_path: str) -> list:
     para_map = {p._element: p for p in doc.paragraphs}
     table_map = {t._element: t for t in doc.tables}
 
+    def _is_bold_heading(para):
+        """Detect bold paragraphs used as visual headings (no heading style)."""
+        text = para.text.strip()
+        if not text or len(text) > 80:
+            return False
+        runs = [r for r in para.runs if r.text.strip()]
+        if not runs:
+            return False
+        return all(r.bold for r in runs)
+
+    def _extract_table_text(table):
+        """Extract table as row-oriented text preserving column relationships."""
+        rows_text = []
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            # Deduplicate merged cells (python-docx repeats merged cell text)
+            deduped = []
+            for c in cells:
+                if c and (not deduped or c != deduped[-1]):
+                    deduped.append(c)
+            if deduped:
+                rows_text.append(" | ".join(deduped))
+        return "\n".join(rows_text)
+
     for child in doc.element.body:
         if child in para_map:
             para = para_map[child]
@@ -73,15 +97,15 @@ def chunk_docx_with_metadata(docx_path: str) -> list:
                 sections.append((current_heading, "\n".join(current_paragraphs)))
                 current_heading = text
                 current_paragraphs = []
+            elif _is_bold_heading(para):
+                sections.append((current_heading, "\n".join(current_paragraphs)))
+                current_heading = text
+                current_paragraphs = []
             else:
                 current_paragraphs.append(text)
         elif child in table_map:
             table = table_map[child]
-            for row in table.rows:
-                for cell in row.cells:
-                    cell_text = cell.text.strip()
-                    if cell_text:
-                        current_paragraphs.append(cell_text)
+            current_paragraphs.append(_extract_table_text(table))
 
     sections.append((current_heading, "\n".join(current_paragraphs)))
 

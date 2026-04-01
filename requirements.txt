@@ -18,3 +18,5 @@ watchdog
 rank_bm25
 sentence-transformers
 sentry-sdk
+ragas
+datasets
