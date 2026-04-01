@@ -79,7 +79,7 @@ def build_vectorstore(
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
-        chunk_overlap=150,
+        chunk_overlap=200,
         separators=["\n\n", "\n", ".", " ", ""]
     )
     docs = splitter.split_documents(all_docs)
@@ -196,7 +196,7 @@ def rebuild_vectorstore_from_s3():
     # Chunk
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=750,
-        chunk_overlap=100,
+        chunk_overlap=200,
         separators=["\n\n", "\n", ".", " ", ""]
     )
     chunks = splitter.split_documents(all_docs)

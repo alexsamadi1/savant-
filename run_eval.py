@@ -144,28 +144,41 @@ def run_query(question: str, client, vectorstore, bm25_index, cfg) -> dict:
     start = time.time()
 
     # Step 1: Rewrite query
+    t0 = time.time()
     rewritten = rewrite_query(question, client)
+    rewrite_time = time.time() - t0
 
     # Step 2: Retrieve
+    t0 = time.time()
     docs = get_relevant_chunks(rewritten, vectorstore, k=K_RETRIEVAL, bm25_index=bm25_index)
+    retrieval_time = time.time() - t0
 
     if not docs:
         latency = round(time.time() - start, 2)
         return {
             "actual_answer": "[NO DOCS RETRIEVED \u2014 fallback triggered]",
             "latency_s": latency,
+            "latency_rewrite_s": round(rewrite_time, 3),
+            "latency_retrieval_s": round(retrieval_time, 3),
+            "latency_rerank_s": 0.0,
+            "latency_generation_s": 0.0,
+            "time_to_generation_s": round(rewrite_time + retrieval_time, 3),
             "citation": "None",
             "source": "none",
             "chunks_retrieved": 0,
             "rerank_hit": False,
+            "rerank_confidence": 0.0,
             "contexts": [],
         }
 
     # Step 3: Rerank top 10
-    ranked = rerank_chunks(rewritten, docs[:10])
+    t0 = time.time()
+    ranked, rerank_confidence = rerank_chunks(rewritten, docs[:10])
+    rerank_time = time.time() - t0
     rerank_hit = len(ranked) > 0
 
     # Step 4: Build messages — pass list of top 5 chunks (matches app.py)
+    t0 = time.time()
     top_chunks = [
         {
             "text": doc.page_content,
@@ -176,12 +189,18 @@ def run_query(question: str, client, vectorstore, bm25_index, cfg) -> dict:
     ]
     profile = {"role": "Evaluator", "tenure": "N/A"}
     messages = build_messages(rewritten, top_chunks, profile, fallback=False)
+    build_messages_time = time.time() - t0
 
     # Step 5: Generate
+    t0 = time.time()
     model = cfg["models"]["default"]
     answer, source, page = generate_answer(messages, client, docs=ranked, model=model)
+    generation_time = time.time() - t0
 
     latency = round(time.time() - start, 2)
+
+    # Time-to-generation: everything before generate_answer is called
+    time_to_generation = rewrite_time + retrieval_time + rerank_time + build_messages_time
 
     # Step 6: Build citation (matches app.py logic)
     section_title = ranked[0].metadata.get("section_title", "") if ranked else ""
@@ -199,10 +218,16 @@ def run_query(question: str, client, vectorstore, bm25_index, cfg) -> dict:
     return {
         "actual_answer": answer,
         "latency_s": latency,
+        "latency_rewrite_s": round(rewrite_time, 3),
+        "latency_retrieval_s": round(retrieval_time, 3),
+        "latency_rerank_s": round(rerank_time, 3),
+        "latency_generation_s": round(generation_time, 3),
+        "time_to_generation_s": round(time_to_generation, 3),
         "citation": citation,
         "source": source or "unknown",
         "chunks_retrieved": len(docs),
         "rerank_hit": rerank_hit,
+        "rerank_confidence": round(rerank_confidence, 4),
         "contexts": contexts,
     }
 
@@ -296,7 +321,7 @@ def run_eval():
     rerank_misses = []
 
     print(f"\n{'\u2500'*72}")
-    print(f"{'Q':>3}  {'Latency':>8}  {'Rerank':>6}  {'Question':<50}")
+    print(f"{'Q':>3}  {'Latency':>8}  {'Rerank':>6}  {'Conf':>6}  {'Question':<50}")
     print(f"{'\u2500'*72}")
 
     for row in questions:
@@ -313,10 +338,16 @@ def run_eval():
             result = {
                 "actual_answer": f"[ERROR: {e}]",
                 "latency_s": 0.0,
+                "latency_rewrite_s": 0.0,
+                "latency_retrieval_s": 0.0,
+                "latency_rerank_s": 0.0,
+                "latency_generation_s": 0.0,
+                "time_to_generation_s": 0.0,
                 "citation": "error",
                 "source": "error",
                 "chunks_retrieved": 0,
                 "rerank_hit": False,
+                "rerank_confidence": 0.0,
                 "contexts": [],
             }
             print(f"  Q{q_id} error: {e}")
@@ -329,7 +360,7 @@ def run_eval():
 
         rerank_indicator = "HIT" if result["rerank_hit"] else "MISS"
         q_short = question[:48] + ".." if len(question) > 50 else question
-        print(f"{q_id:>3}  {result['latency_s']:>7.2f}s  {rerank_indicator:>6}  {q_short:<50}")
+        print(f"{q_id:>3}  {result['latency_s']:>7.2f}s  {rerank_indicator:>6}  {result.get('rerank_confidence', 0):>5.2f}  {q_short:<50}")
 
         notes = ""
         if is_adversarial:
@@ -348,7 +379,13 @@ def run_eval():
             "source_retrieved": result["source"],
             "chunks_retrieved": result["chunks_retrieved"],
             "rerank_hit": result["rerank_hit"],
+            "rerank_confidence": result["rerank_confidence"],
             "latency_s": result["latency_s"],
+            "latency_rewrite_s": result["latency_rewrite_s"],
+            "latency_retrieval_s": result["latency_retrieval_s"],
+            "latency_rerank_s": result["latency_rerank_s"],
+            "latency_generation_s": result["latency_generation_s"],
+            "time_to_generation_s": result["time_to_generation_s"],
             "quality_score": "",
             "citation_correct": "",
             "notes": notes,
@@ -380,8 +417,10 @@ def run_eval():
         "id", "difficulty", "question_type", "question",
         "expected_answer", "actual_answer",
         "citation", "source_retrieved",
-        "chunks_retrieved", "rerank_hit",
-        "latency_s", "quality_score", "citation_correct", "notes",
+        "chunks_retrieved", "rerank_hit", "rerank_confidence",
+        "latency_s", "latency_rewrite_s", "latency_retrieval_s",
+        "latency_rerank_s", "latency_generation_s", "time_to_generation_s",
+        "quality_score", "citation_correct", "notes",
         "ragas_faithfulness", "ragas_answer_relevancy",
         "ragas_context_precision", "ragas_context_recall", "ragas_combined",
     ]
@@ -393,10 +432,23 @@ def run_eval():
     avg_latency = round(total_latency / len(questions), 2)
     rerank_hit_count = sum(1 for r in results if r["rerank_hit"])
 
+    # Per-stage latency averages
+    n_q = len(questions)
+    avg_rewrite = round(sum(r.get("latency_rewrite_s", 0) for r in results) / n_q, 2) if n_q else 0
+    avg_retrieval = round(sum(r.get("latency_retrieval_s", 0) for r in results) / n_q, 2) if n_q else 0
+    avg_rerank = round(sum(r.get("latency_rerank_s", 0) for r in results) / n_q, 2) if n_q else 0
+    avg_generation = round(sum(r.get("latency_generation_s", 0) for r in results) / n_q, 2) if n_q else 0
+    avg_ttg = round(sum(r.get("time_to_generation_s", 0) for r in results) / n_q, 2) if n_q else 0
+
     print(f"\n{'='*72}")
     print(f"  DONE \u2014 {len(questions)} questions")
     print(f"  Output: {output_path}")
     print(f"  Avg latency: {avg_latency}s")
+    print(f"  Avg rewrite:    {avg_rewrite:.2f}s")
+    print(f"  Avg retrieval:  {avg_retrieval:.2f}s")
+    print(f"  Avg rerank:     {avg_rerank:.2f}s")
+    print(f"  Avg generation: {avg_generation:.2f}s")
+    print(f"  Avg time-to-generation: {avg_ttg:.2f}s (target: \u22641s)")
     print(f"  Reranker hit: {rerank_hit_count}/{len(questions)}")
     if slow_queries:
         print(f"  Slow queries (>5s): Q{', Q'.join(slow_queries)}")
@@ -407,6 +459,7 @@ def run_eval():
     # -----------------------------------------------------------------------
     # RAGAS aggregate summary
     # -----------------------------------------------------------------------
+    mean_f = mean_ar = mean_cp = mean_cr = mean_combined = None
     if ragas_scores:
         def _mean(key):
             vals = [s[key] for s in ragas_scores if s[key] != "" and s[key] is not None]
@@ -435,6 +488,28 @@ def run_eval():
             else:
                 print(f"  XX {mean_combined}% < 80% \u2014 below Phase 2a threshold")
         print(f"{'='*72}")
+
+    # -----------------------------------------------------------------------
+    # Persistent eval trend log
+    # -----------------------------------------------------------------------
+    trend_path = Path("eval_trend.csv")
+    trend_exists = trend_path.exists()
+    try:
+        with open(trend_path, "a", newline="", encoding="utf-8") as tf:
+            writer = csv.writer(tf)
+            if not trend_exists:
+                writer.writerow(["timestamp", "ragas_faithfulness", "ragas_answer_relevancy",
+                    "ragas_context_precision", "ragas_context_recall", "ragas_combined",
+                    "avg_latency", "reranker_hit_rate"])
+            writer.writerow([
+                datetime.now().isoformat(),
+                mean_f or "", mean_ar or "", mean_cp or "", mean_cr or "", mean_combined or "",
+                avg_latency,
+                f"{rerank_hit_count}/{len(questions)}"
+            ])
+        print(f"  Trend logged to {trend_path}")
+    except Exception as e:
+        print(f"  Trend log failed: {e}")
 
     print(f"""
   Next steps:

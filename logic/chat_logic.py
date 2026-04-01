@@ -35,13 +35,14 @@ def rewrite_query(user_input: str, client: OpenAI) -> str:
         return user_input
 
 # --- Rerank using Cross-Encoder ---
-def rerank_chunks(query: str, chunks: List[Document]) -> List[Document]:
+def rerank_chunks(query: str, chunks: List[Document]) -> Tuple[List[Document], float]:
     if not chunks:
-        return []
+        return [], 0.0
     pairs = [[query, chunk.page_content[:512]] for chunk in chunks]
     scores = _cross_encoder.predict(pairs)
     ranked_indices = np.argsort(scores)[::-1]
-    return [chunks[i] for i in ranked_indices]
+    top_score = float(scores[ranked_indices[0]]) if len(ranked_indices) > 0 else 0.0
+    return [chunks[i] for i in ranked_indices], top_score
 # --- Fallback Summarization ---
 def summarize_fallback(query, chunks: List[Document], client: OpenAI) -> str:
     fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in chunks[:3]])

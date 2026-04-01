@@ -460,7 +460,8 @@ with st.spinner("Searching documents..."):
                 log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="fallback")
                 st.stop()
 
-            ranked = rerank_chunks(rewritten, docs[:10])
+            ranked, rerank_confidence = rerank_chunks(rewritten, docs[:10])
+            print(f"[RERANK] confidence={rerank_confidence:.3f} — {user_input[:80]}")
             top_chunks = [
                 {
                     "text": doc.page_content,
