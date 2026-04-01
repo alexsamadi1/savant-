@@ -106,7 +106,7 @@ except ImportError as e:
 # Config
 # ---------------------------------------------------------------------------
 EVAL_CSV = "savant_eval_set_v2.csv"
-K_RETRIEVAL = 20   # matches app.py
+K_RETRIEVAL = 30   # matches app.py
 
 
 # ---------------------------------------------------------------------------

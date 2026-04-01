@@ -446,7 +446,7 @@ with st.spinner("Searching documents..."):
         try:
             start_time = time.time()
             rewritten = rewrite_query(user_input, client)
-            docs = get_relevant_chunks(rewritten, vectorstore, k=20, bm25_index=bm25_index)
+            docs = get_relevant_chunks(rewritten, vectorstore, k=30, bm25_index=bm25_index)
 
             if not docs:
                 answer = assistant["fallback_message"]

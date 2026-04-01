@@ -236,13 +236,6 @@ def build_messages(user_input, context_chunk, profile, fallback=False):
             "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
         )
 
-        if isinstance(context_chunk, list) and len(context_chunk) > 2:
-            # Lost-in-middle reordering: best first, worst in middle, second-best last
-            reordered = [context_chunk[0]]  # best
-            reordered.extend(context_chunk[2:])  # middle ranks
-            reordered.append(context_chunk[1])  # second-best at end
-            context_chunk = reordered
-
         if isinstance(context_chunk, list):
             parts = []
             for i, chunk in enumerate(context_chunk):
