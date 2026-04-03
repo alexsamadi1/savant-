@@ -296,12 +296,14 @@ if not st.session_state.ls_loaded:
 
 
 # Deferred chat save — runs at top level on every rerun (outside context managers).
-# This persists whatever is in chat_history from the previous rerun's response flow.
+# Uses st.components.v1.html (fire-and-forget script) instead of streamlit_js_eval
+# to avoid triggering additional Streamlit reruns.
 if st.session_state.ls_loaded and st.session_state.chat_history:
     _chat_json = json.dumps(st.session_state.chat_history[-MAX_CHAT_MESSAGES:])
-    streamlit_js_eval(
-        js_expressions=f"localStorage.setItem('savant_chat_history', JSON.stringify({_chat_json})), null",
-        key="save_chat_deferred",
+    _escaped = _chat_json.replace("</", "<\\/")
+    st.components.v1.html(
+        f"<script>localStorage.setItem('savant_chat_history', JSON.stringify({_escaped}));</script>",
+        height=0,
     )
 
 
@@ -536,7 +538,22 @@ with st.spinner("Searching documents..."):
                 }
                 for doc in ranked[:5]
             ]
-            messages = build_messages(rewritten, top_chunks, profile, fallback=False)
+            # Extract last 3 user/assistant pairs for multi-turn context
+            conv_history = []
+            history = st.session_state.chat_history[:-1]  # exclude the just-appended user msg
+            pairs = []
+            i = len(history) - 1
+            while i >= 1 and len(pairs) < 3:
+                if history[i]["role"] == "assistant" and history[i - 1]["role"] == "user":
+                    pairs.append((history[i - 1], history[i]))
+                    i -= 2
+                else:
+                    i -= 1
+            for user_msg, asst_msg in reversed(pairs):
+                conv_history.append({"role": "user", "content": user_msg["content"]})
+                conv_history.append({"role": "assistant", "content": asst_msg["content"][:500]})
+
+            messages = build_messages(rewritten, top_chunks, profile, fallback=False, conversation_history=conv_history)
 
             # --- Stream answer ---
             stream_gen, source, page = generate_answer_streaming(
