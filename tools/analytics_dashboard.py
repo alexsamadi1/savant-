@@ -56,6 +56,8 @@ def show_analytics_dashboard():
         return
 
     show_documents_panel()
+    show_gap_analysis_panel()
+    show_conflict_detection_panel()
     st.markdown("---")
     show_usage_summary(df)
     show_answer_quality(df)
@@ -118,6 +120,164 @@ def show_documents_panel():
 
     except Exception as e:
         st.warning(f"Could not load document list: {e}")
+
+
+def show_gap_analysis_panel():
+    st.markdown("---")
+    st.subheader("🔎 Knowledge Base Gap Analysis")
+    st.caption("AI-powered audit of document coverage, staleness, and missing content")
+
+    if st.button("Run Gap Analysis", type="primary"):
+        try:
+            s3 = boto3.client(
+                "s3",
+                aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
+                region_name=get_secret("AWS_REGION"),
+            )
+            bucket = get_secret("S3_DOCS_BUCKET")
+
+            with st.spinner("Analyzing knowledge base gaps... this may take 15-30 seconds"):
+                from tools.gap_analysis import run_gap_analysis
+                result = run_gap_analysis(s3, bucket)
+
+            st.session_state["gap_analysis_result"] = result
+        except Exception as e:
+            st.error(f"Gap analysis failed: {e}")
+            print(f"[GAP ANALYSIS] Error: {e}")
+            return
+
+    result = st.session_state.get("gap_analysis_result")
+    if not result:
+        st.info("Click the button above to run a full gap analysis.")
+        return
+
+    # --- Health Score ---
+    score = result.get("health_score", 0)
+    explanation = result.get("health_explanation", "")
+    col1, col2 = st.columns([1, 3])
+    col1.metric("Health Score", f"{score}/100")
+    col2.markdown(f"*{explanation}*")
+
+    # --- Coverage Gaps ---
+    gaps = result.get("coverage_gaps", [])
+    if gaps:
+        with st.expander(f"Coverage Gaps ({len(gaps)} topics)", expanded=True):
+            for gap in gaps:
+                topic = gap.get("topic", "Unknown")
+                suggested = gap.get("suggested_document_title", "")
+                questions = gap.get("example_questions", [])
+                st.markdown(f"**{topic}**")
+                for q in questions:
+                    st.markdown(f"- {q}")
+                if suggested:
+                    st.success(f"Suggested document: **{suggested}**")
+                st.markdown("")
+
+    # --- Underperforming Documents ---
+    underperforming = result.get("underperforming_docs", [])
+    if underperforming:
+        with st.expander(f"Underperforming Documents ({len(underperforming)})"):
+            for doc in underperforming:
+                filename = doc.get("filename", "")
+                reason = doc.get("reason", "")
+                clean = filename.replace("_", " ").replace("-", " ").title()
+                st.markdown(f"- **{clean}** — {reason}")
+
+    # --- Stale Documents ---
+    stale = result.get("stale_docs", [])
+    if stale:
+        with st.expander(f"Stale Documents ({len(stale)})"):
+            for doc in stale:
+                filename = doc.get("filename", "")
+                days = doc.get("days_since_upload", 0)
+                rec = doc.get("recommendation", "")
+                clean = filename.replace("_", " ").replace("-", " ").title()
+                st.markdown(f"- **{clean}** — {days} days old. {rec}")
+
+    # --- Missing Standard Documents ---
+    missing = result.get("missing_common_docs", [])
+    if missing:
+        with st.expander(f"Missing Standard Documents ({len(missing)})"):
+            for doc in missing:
+                title = doc.get("title", "")
+                why = doc.get("why_needed", "")
+                st.markdown(f"- **{title}** — {why}")
+
+
+def show_conflict_detection_panel():
+    st.markdown("---")
+    st.subheader("⚔️ Document Conflict Detection")
+    st.caption("Scans policy topics for contradictions across documents")
+
+    if st.button("Run Conflict Detection", type="primary"):
+        try:
+            from tools.embeddings import load_faiss_vectorstore
+            vectorstore, bm25_index = load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
+
+            with st.spinner("Scanning for conflicts across 14 policy topics... this may take 30-60 seconds"):
+                from tools.gap_analysis import run_conflict_detection
+                conflicts = run_conflict_detection(vectorstore, bm25_index, get_secret("OPENAI_API_KEY"))
+
+            st.session_state["conflict_detection_result"] = conflicts
+        except Exception as e:
+            st.error(f"Conflict detection failed: {e}")
+            print(f"[CONFLICT DETECTION] Error: {e}")
+            return
+
+    conflicts = st.session_state.get("conflict_detection_result")
+    if conflicts is None:
+        st.info("Click the button above to scan for contradictions across documents.")
+        return
+
+    if not conflicts:
+        st.success("No conflicts detected across policy topics.")
+        return
+
+    # --- Summary metrics ---
+    total = len(conflicts)
+    high = sum(1 for c in conflicts if c.get("severity") == "high")
+    medium = sum(1 for c in conflicts if c.get("severity") == "medium")
+    low = sum(1 for c in conflicts if c.get("severity") == "low")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Conflicts", total)
+    col2.metric("High", high)
+    col3.metric("Medium", medium)
+    col4.metric("Low", low)
+
+    # --- Display grouped by severity ---
+    severity_order = ["high", "medium", "low"]
+    severity_labels = {"high": "High Severity", "medium": "Medium Severity", "low": "Low Severity"}
+    severity_icons = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+
+    for sev in severity_order:
+        sev_conflicts = [c for c in conflicts if c.get("severity") == sev]
+        if not sev_conflicts:
+            continue
+
+        icon = severity_icons[sev]
+        label = severity_labels[sev]
+        with st.expander(f"{icon} {label} ({len(sev_conflicts)})", expanded=(sev == "high")):
+            for c in sev_conflicts:
+                topic = c.get("topic", "Unknown")
+                desc = c.get("description", "")
+                src1 = c.get("source_1", "Unknown")
+                src2 = c.get("source_2", "Unknown")
+                exc1 = c.get("excerpt_1", "")
+                exc2 = c.get("excerpt_2", "")
+
+                st.markdown(f"**{topic}** — {desc}")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    clean1 = src1.replace("_", " ").replace("-", " ").title()
+                    st.caption(f"Source: {clean1}")
+                    st.markdown(f"> {exc1}")
+                with col_b:
+                    clean2 = src2.replace("_", " ").replace("-", " ").title()
+                    st.caption(f"Source: {clean2}")
+                    st.markdown(f"> {exc2}")
+                st.markdown("---")
 
 
 def show_usage_summary(df):
