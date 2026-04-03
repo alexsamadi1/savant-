@@ -26,6 +26,50 @@ def clean_source_name(raw):
     name = name.replace("_", " ").strip().title()
     return name
 
+def _ensure_gap_analysis():
+    """Auto-run gap analysis on first dashboard load, cache in session_state."""
+    if "gap_analysis_result" in st.session_state:
+        return
+    try:
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
+            region_name=get_secret("AWS_REGION"),
+        )
+        bucket = get_secret("S3_DOCS_BUCKET")
+        with st.spinner("Running initial knowledge base health check..."):
+            from tools.gap_analysis import run_gap_analysis
+            st.session_state["gap_analysis_result"] = run_gap_analysis(s3, bucket)
+    except Exception as e:
+        print(f"[GAP ANALYSIS] Auto-run failed: {e}")
+        st.session_state["gap_analysis_result"] = None
+
+
+def _show_health_score():
+    """Render the health score metric with color coding."""
+    result = st.session_state.get("gap_analysis_result")
+    if not result:
+        st.warning("Health score unavailable — gap analysis did not complete.")
+        return
+    score = result.get("health_score", 0)
+    explanation = result.get("health_explanation", "")
+    if score >= 70:
+        color = "#00C9A7"
+    elif score >= 40:
+        color = "#f0ad4e"
+    else:
+        color = "#d9534f"
+    st.markdown(
+        f"<div style='text-align:center;margin-bottom:1rem;'>"
+        f"<span style='font-size:3rem;font-weight:700;color:{color};'>{score}</span>"
+        f"<span style='font-size:1.2rem;color:#888;'>/100</span>"
+        f"<p style='color:#aaa;font-size:0.95rem;margin-top:0.25rem;'>{explanation}</p>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def show_analytics_dashboard():
     cfg = get_config()
     brand = cfg["brand"]
@@ -55,20 +99,62 @@ def show_analytics_dashboard():
         st.error(f"Error loading log data: {e}")
         return
 
-    show_documents_panel()
-    show_gap_analysis_panel()
-    show_conflict_detection_panel()
-    st.markdown("---")
-    show_usage_summary(df)
-    show_answer_quality(df)
-    show_unanswered_questions(df)
-    show_recent_activity(df)
-    show_top_questions(df)
-    show_top_keywords(df)
-    show_user_demographics(df)
-    show_bot_performance(df)
-    show_source_documents(df)
-    show_sessions(df)
+    # Auto-run gap analysis for health score
+    _ensure_gap_analysis()
+
+    tab_overview, tab_gaps, tab_conflicts, tab_usage, tab_docs = st.tabs([
+        "Overview", "Knowledge Gaps", "Conflicts", "Usage & Activity", "Documents"
+    ])
+
+    with tab_overview:
+        _show_health_score()
+        show_usage_summary(df)
+        show_answer_quality(df)
+
+    with tab_gaps:
+        show_gap_analysis_panel()
+        st.markdown("---")
+        show_unanswered_questions(df)
+
+    with tab_conflicts:
+        show_conflict_detection_panel()
+
+    with tab_usage:
+        show_recent_activity(df)
+        show_top_questions(df)
+        show_top_keywords(df)
+        show_user_demographics(df)
+        show_bot_performance(df)
+        show_sessions(df)
+
+    with tab_docs:
+        show_documents_panel()
+        st.markdown("---")
+        show_source_documents(df)
+        # Stale & underperforming from cached gap analysis
+        gap_result = st.session_state.get("gap_analysis_result")
+        if gap_result:
+            stale = gap_result.get("stale_docs", [])
+            if stale:
+                st.markdown("---")
+                st.subheader("🕰️ Stale Documents")
+                st.caption("Documents uploaded more than 180 days ago that may need review")
+                for doc in stale:
+                    filename = doc.get("filename", "")
+                    days = doc.get("days_since_upload", 0)
+                    rec = doc.get("recommendation", "")
+                    clean = filename.replace("_", " ").replace("-", " ").title()
+                    st.markdown(f"- **{clean}** — {days} days old. {rec}")
+            underperforming = gap_result.get("underperforming_docs", [])
+            if underperforming:
+                st.markdown("---")
+                st.subheader("📉 Underperforming Documents")
+                st.caption("Documents that exist but are rarely or never cited in answers")
+                for doc in underperforming:
+                    filename = doc.get("filename", "")
+                    reason = doc.get("reason", "")
+                    clean = filename.replace("_", " ").replace("-", " ").title()
+                    st.markdown(f"- **{clean}** — {reason}")
 
     st.markdown("---")
     if st.button("🔙 Back to Assistant"):
@@ -123,7 +209,6 @@ def show_documents_panel():
 
 
 def show_gap_analysis_panel():
-    st.markdown("---")
     st.subheader("🔎 Knowledge Base Gap Analysis")
     st.caption("AI-powered audit of document coverage, staleness, and missing content")
 
@@ -206,7 +291,6 @@ def show_gap_analysis_panel():
 
 
 def show_conflict_detection_panel():
-    st.markdown("---")
     st.subheader("⚔️ Document Conflict Detection")
     st.caption("Scans policy topics for contradictions across documents")
 

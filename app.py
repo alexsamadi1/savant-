@@ -19,7 +19,7 @@ from tools.vectorstore_builder import rebuild_vectorstore_from_s3, get_relevant_
 from tools.log_utils import ensure_log_file_exists, log_chat_interaction
 from tools.analytics_dashboard import show_analytics_dashboard
 from tools.filename_generator import generate_smart_filename, extract_text_from_docx
-from logic.chat_logic import generate_answer, generate_answer_streaming, build_messages, check_grounding, GROUNDING_WARNING, rerank_chunks, rewrite_query, suggest_follow_ups
+from logic.chat_logic import generate_answer, generate_answer_streaming, build_messages, check_grounding, GROUNDING_WARNING, rerank_chunks, rewrite_query
 from config_loader import get_config
 from io import BytesIO
 from pathlib import Path
@@ -295,17 +295,20 @@ if not st.session_state.ls_loaded:
         st.session_state.chat_history = saved_chat[-MAX_CHAT_MESSAGES:]
 
 
+# Deferred chat save — runs at top level on every rerun (outside context managers).
+# This persists whatever is in chat_history from the previous rerun's response flow.
+if st.session_state.ls_loaded and st.session_state.chat_history:
+    _chat_json = json.dumps(st.session_state.chat_history[-MAX_CHAT_MESSAGES:])
+    streamlit_js_eval(
+        js_expressions=f"localStorage.setItem('savant_chat_history', JSON.stringify({_chat_json})), null",
+        key="save_chat_deferred",
+    )
+
+
 def save_profile_to_ls(profile_dict):
     """Save user profile to localStorage."""
     profile_json = json.dumps(profile_dict)
     streamlit_js_eval(js_expressions=f"localStorage.setItem('savant_profile', JSON.stringify({profile_json})), null", key=f"save_profile_{time.time()}")
-
-
-def save_chat_to_ls(chat_list):
-    """Save chat history to localStorage (truncated to last MAX_CHAT_MESSAGES)."""
-    truncated = chat_list[-MAX_CHAT_MESSAGES:]
-    chat_json = json.dumps(truncated)
-    streamlit_js_eval(js_expressions=f"localStorage.setItem('savant_chat_history', JSON.stringify({chat_json})), null", key=f"save_chat_{time.time()}")
 
 
 # --- User Onboarding ---
@@ -482,9 +485,6 @@ user_input = st.chat_input(assistant["chat_placeholder"])
 if "example_question" in st.session_state and not user_input:
     user_input = st.session_state.pop("example_question")
 
-if "followup_question" in st.session_state and not user_input:
-    user_input = st.session_state.pop("followup_question")
-
 if not user_input or not isinstance(user_input, str) or not user_input.strip():
     st.stop()
 
@@ -499,7 +499,6 @@ if user_input:
 
 st.chat_message("user").markdown(f"<div class='chat-bubble user-bubble'>{html.escape(user_input)}</div>", unsafe_allow_html=True)
 st.session_state.chat_history.append({"role": "user", "content": user_input})
-save_chat_to_ls(st.session_state.chat_history)
 
 # --- Generate Response ---
 with st.spinner("Searching documents..."):
@@ -524,7 +523,6 @@ with st.spinner("Searching documents..."):
                     unsafe_allow_html=True
                 )
                 st.session_state.chat_history.append({"role": "assistant", "content": answer})
-                save_chat_to_ls(st.session_state.chat_history)
                 log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="fallback", gap_reason="no_docs_retrieved")
                 st.stop()
 
@@ -538,22 +536,7 @@ with st.spinner("Searching documents..."):
                 }
                 for doc in ranked[:5]
             ]
-            # Extract last 3 exchanges for multi-turn context
-            conv_history = []
-            history = st.session_state.chat_history[:-1]  # exclude the just-appended user msg
-            pairs = []
-            i = len(history) - 1
-            while i >= 1 and len(pairs) < 3:
-                if history[i]["role"] == "assistant" and history[i - 1]["role"] == "user":
-                    pairs.append((history[i - 1], history[i]))
-                    i -= 2
-                else:
-                    i -= 1
-            for user_msg, asst_msg in reversed(pairs):
-                conv_history.append({"role": "user", "content": user_msg["content"]})
-                conv_history.append({"role": "assistant", "content": asst_msg["content"][:500]})
-
-            messages = build_messages(rewritten, top_chunks, profile, fallback=False, conversation_history=conv_history)
+            messages = build_messages(rewritten, top_chunks, profile, fallback=False)
 
             # --- Stream answer ---
             stream_gen, source, page = generate_answer_streaming(
@@ -618,7 +601,6 @@ with st.spinner("Searching documents..."):
                 </script>
             """, unsafe_allow_html=True)
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            save_chat_to_ls(st.session_state.chat_history)
 
             # --- Grounding check (runs after answer is visible) ---
             gap_reason = "direct"
@@ -637,24 +619,10 @@ with st.spinner("Searching documents..."):
                         unsafe_allow_html=True
                     )
                     st.session_state.chat_history[-1]["content"] = answer
-                    save_chat_to_ls(st.session_state.chat_history)
 
             # --- Log ---
             source_titles = [doc.metadata.get("source", "unknown") for doc in docs]
             log_chat_interaction(user_input, answer, profile, source_titles, fallback=(gap_reason != "direct"), response_type="direct", gap_reason=gap_reason)
-
-            # --- Follow-up suggestions ---
-            try:
-                followups = suggest_follow_ups(user_input, answer, client)
-                if followups:
-                    cols = st.columns(len(followups))
-                    for i, suggestion in enumerate(followups):
-                        with cols[i]:
-                            if st.button(suggestion, key=f"followup_{len(st.session_state.chat_history)}_{i}"):
-                                st.session_state["followup_question"] = suggestion
-                                st.rerun()
-            except Exception as e:
-                print(f"[FOLLOWUP] Error generating suggestions: {e}")
 
         except Exception as e:
             sentry_sdk.capture_exception(e)
@@ -665,5 +633,4 @@ with st.spinner("Searching documents..."):
                 unsafe_allow_html=True
             )
             st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
-            save_chat_to_ls(st.session_state.chat_history)
             log_chat_interaction(user_input, error_msg, profile, [], fallback=True, response_type="error", gap_reason="error")

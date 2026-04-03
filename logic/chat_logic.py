@@ -204,7 +204,7 @@ def generate_answer_streaming(messages, client, docs=None, model="gpt-4o-mini"):
             yield f"Failed to generate answer: {e}"
         return error_gen(), source, page
 
-def build_messages(user_input, context_chunk, profile, fallback=False, conversation_history=None):
+def build_messages(user_input, context_chunk, profile, fallback=False):
     role = profile.get("role", "employee")
     tenure = profile.get("tenure", "unknown tenure")
 
@@ -220,14 +220,13 @@ def build_messages(user_input, context_chunk, profile, fallback=False, conversat
             "Summarize a helpful answer based on what you can. "
             "If unsure, advise the user to contact their administrator."
         )
-        messages = [{"role": "system", "content": system_prompt}]
-        if conversation_history:
-            messages.extend(conversation_history)
-        messages.append({
-            "role": "user",
-            "content": f"<context>\n{context_chunk}\n</context>\n\nQuestion: {user_input}"
-        })
-        return messages
+        return [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": f"<context>\n{context_chunk}\n</context>\n\nQuestion: {user_input}"
+            }
+        ]
     else:
         system_prompt = (
             f"You are {company}'s knowledge assistant. The user is a {role} "
@@ -252,14 +251,13 @@ def build_messages(user_input, context_chunk, profile, fallback=False, conversat
             source_citation = f"{source}, page {page}" if page else source
             context_text = f"[Excerpt from {source_citation}]\n{context_chunk['text']}"
 
-        messages = [{"role": "system", "content": system_prompt}]
-        if conversation_history:
-            messages.extend(conversation_history)
-        messages.append({
-            "role": "user",
-            "content": f"<context>\n{context_text}\n</context>\n\nQuestion: {user_input}"
-        })
-        return messages
+        return [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": f"<context>\n{context_text}\n</context>\n\nQuestion: {user_input}"
+            }
+        ]
     
 def check_grounding(answer: str, chunks: list, client: OpenAI) -> bool:
     """
