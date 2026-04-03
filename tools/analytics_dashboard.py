@@ -5,10 +5,12 @@ try:
 except ImportError:
     pass
 import pandas as pd
+import json
 import collections
 import re
 import boto3
 from datetime import datetime
+from openai import OpenAI
 from config_loader import get_config
 
 STOPWORDS = {
@@ -35,11 +37,15 @@ def show_analytics_dashboard():
         return
 
     try:
-        df = pd.read_csv("query_logs.csv", usecols=[
+        all_cols = pd.read_csv("query_logs.csv", nrows=0).columns.tolist()
+        use_cols = [
             "timestamp", "session_id", "question", "response",
             "fallback", "response_type", "user_role", "user_tenure",
             "source_docs", "feedback"
-        ])
+        ]
+        if "gap_reason" in all_cols:
+            use_cols.append("gap_reason")
+        df = pd.read_csv("query_logs.csv", usecols=use_cols)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["fallback"] = pd.to_numeric(df["fallback"], errors="coerce").fillna(0)
     except FileNotFoundError:
@@ -155,6 +161,38 @@ def show_answer_quality(df):
     st.bar_chart(quality_df.set_index("Type"))
 
 
+def _show_flat_unanswered(unanswered_df):
+    """Flat table fallback for unanswered questions."""
+    display = (
+        unanswered_df[["timestamp", "question"]]
+        .sort_values("timestamp", ascending=False)
+        .head(15)
+        .reset_index(drop=True)
+    )
+    display["timestamp"] = display["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
+    display.columns = ["Asked on", "Question"]
+    st.dataframe(display, use_container_width=True, hide_index=True)
+
+
+def _cluster_questions(questions):
+    """Use GPT to cluster unanswered questions into topic groups."""
+    client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
+    prompt = (
+        "Group these questions into 3-7 topic categories. "
+        "Return JSON only, no markdown: "
+        '{\"topics\": [{\"name\": string, \"questions\": string[], '
+        '\"suggested_action\": string}]}. '
+        "suggested_action should recommend what document to upload or update.\n\n"
+        "Questions:\n" + "\n".join(f"- {q}" for q in questions)
+    )
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+    )
+    return json.loads(resp.choices[0].message.content)
+
+
 def show_unanswered_questions(df):
     st.subheader("⚠️ Questions that need better documents")
     st.caption("These questions triggered fallback responses — consider uploading documents that cover these topics")
@@ -162,21 +200,81 @@ def show_unanswered_questions(df):
     if "fallback" not in df.columns:
         return
 
-    unanswered = (
-        df[df["fallback"] == 1][["timestamp", "question"]]
-        .dropna()
-        .sort_values("timestamp", ascending=False)
-        .head(15)
-        .reset_index(drop=True)
-    )
+    # Filter: fallback == 1 OR gap_reason in scope
+    has_gap = "gap_reason" in df.columns
+    mask = df["fallback"] == 1
+    if has_gap:
+        mask = mask | df["gap_reason"].isin(["no_docs_retrieved", "grounding_failed"])
+
+    unanswered = df[mask].dropna(subset=["question"]).copy()
 
     if unanswered.empty:
         st.success("No fallback questions — the bot is answering everything confidently.")
         return
 
-    unanswered["timestamp"] = unanswered["timestamp"].dt.strftime("%b %d, %Y %I:%M %p")
-    unanswered.columns = ["Asked on", "Question"]
-    st.dataframe(unanswered, use_container_width=True, hide_index=True)
+    # Assign gap_reason for rows that only matched on fallback==1
+    if has_gap:
+        unanswered["gap_reason"] = unanswered["gap_reason"].fillna("unknown")
+    else:
+        unanswered["gap_reason"] = "unknown"
+
+    # For fewer than 3 questions, show flat list
+    if len(unanswered) < 3:
+        _show_flat_unanswered(unanswered)
+        return
+
+    # --- Summary metrics ---
+    total = len(unanswered)
+    reason_counts = unanswered["gap_reason"].value_counts()
+    most_common_reason = reason_counts.index[0]
+
+    # --- Try clustering ---
+    questions_list = unanswered["question"].tolist()
+    # Build a lookup: question -> gap_reason for breakdown
+    q_reasons = dict(zip(unanswered["question"], unanswered["gap_reason"]))
+
+    try:
+        with st.spinner("Clustering unanswered questions by topic..."):
+            result = _cluster_questions(questions_list)
+        topics = result.get("topics", [])
+        if not topics:
+            raise ValueError("Empty topics list")
+    except Exception as e:
+        print(f"[ANALYTICS] Clustering failed: {e}")
+        st.warning("Could not cluster questions — showing flat list.")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total unanswered", total)
+        col2.metric("Most common gap reason", most_common_reason)
+        col3.metric("Unique gap reasons", len(reason_counts))
+        _show_flat_unanswered(unanswered)
+        return
+
+    # --- Summary row ---
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total unanswered", total)
+    col2.metric("Topic clusters", len(topics))
+    col3.metric("Most common gap reason", most_common_reason)
+
+    # --- Topic expanders ---
+    for topic in topics:
+        name = topic.get("name", "Unknown Topic")
+        t_questions = topic.get("questions", [])
+        action = topic.get("suggested_action", "")
+        count = len(t_questions)
+
+        # Gap reason breakdown for this cluster
+        reasons = {}
+        for q in t_questions:
+            r = q_reasons.get(q, "unknown")
+            reasons[r] = reasons.get(r, 0) + 1
+
+        with st.expander(f"{name} ({count})", expanded=False):
+            for q in t_questions:
+                st.markdown(f"- {q}")
+            if action:
+                st.info(f"**Suggested action:** {action}")
+            reason_parts = [f"{r}: {c}" for r, c in sorted(reasons.items())]
+            st.caption(f"Gap reasons — {', '.join(reason_parts)}")
 
 
 def show_recent_activity(df):

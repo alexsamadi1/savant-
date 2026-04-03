@@ -20,3 +20,4 @@ sentence-transformers
 sentry-sdk
 ragas
 datasets
+streamlit-js-eval

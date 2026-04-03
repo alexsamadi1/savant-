@@ -28,7 +28,7 @@ def ensure_log_file_exists():
             writer = csv.writer(f)
             writer.writerow([
                 "timestamp", "session_id", "question", "response",
-                "fallback", "response_type", "user_role", "user_tenure", "source_docs", "feedback"
+                "fallback", "response_type", "gap_reason", "user_role", "user_tenure", "source_docs", "feedback"
             ])
 
 def log_query_to_csv(
@@ -36,6 +36,7 @@ def log_query_to_csv(
     response: str,
     fallback: bool = False,
     response_type: str = "direct",
+    gap_reason: str = "direct",
     user_role: str = None,
     user_tenure: str = None,
     source_docs: list = None,
@@ -58,6 +59,7 @@ def log_query_to_csv(
         response.strip(),
         fallback,
         response_type,
+        gap_reason,
         user_role or "",
         user_tenure or "",
         ", ".join(source_docs) if source_docs else "",
@@ -82,6 +84,7 @@ def log_chat_interaction(
     source_docs,
     fallback=False,
     response_type="direct",
+    gap_reason="direct",
     feedback=""
 ):
     """Convenience wrapper to simplify logging full chat interaction."""
@@ -90,6 +93,7 @@ def log_chat_interaction(
         response=answer,
         fallback=fallback,
         response_type=response_type,
+        gap_reason=gap_reason,
         user_role=user_profile.get("role", "Unknown"),
         user_tenure=user_profile.get("tenure", "Unknown"),
         source_docs=source_docs,

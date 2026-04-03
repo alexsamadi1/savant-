@@ -28,7 +28,9 @@ import time
 import re
 import html
 import os
+import json
 import nltk
+from streamlit_js_eval import streamlit_js_eval
 
 # --- Load Config ---
 cfg = get_config()
@@ -251,10 +253,62 @@ button[data-testid="baseButton-primary"]:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- User Onboarding ---
+# --- Session State Init ---
 if "user_profile" not in st.session_state:
     st.session_state.user_profile = {}
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
+# --- localStorage Persistence ---
+MAX_CHAT_MESSAGES = 50
+
+if "ls_loaded" not in st.session_state:
+    st.session_state.ls_loaded = False
+
+if not st.session_state.ls_loaded:
+    # JS returns None until the browser executes it and triggers a rerun.
+    # Use "__empty__" sentinel so we can tell "JS hasn't run" (None) from
+    # "localStorage has no value" ("__empty__").
+    saved_profile = streamlit_js_eval(
+        js_expressions="JSON.parse(localStorage.getItem('savant_profile') || '\"__empty__\"')",
+        key="ls_profile",
+    )
+    saved_chat = streamlit_js_eval(
+        js_expressions="JSON.parse(localStorage.getItem('savant_chat_history') || '\"__empty__\"')",
+        key="ls_chat",
+    )
+
+    if saved_profile is None:
+        # JS hasn't executed yet — show spinner, stop, wait for auto-rerun
+        st.markdown(
+            "<div style='display:flex;justify-content:center;align-items:center;height:60vh;'>"
+            "<p style='color:#888;font-size:1.1rem;'>Loading your profile…</p></div>",
+            unsafe_allow_html=True,
+        )
+        st.stop()
+
+    # JS has returned — process values and mark done
+    st.session_state.ls_loaded = True
+    if isinstance(saved_profile, dict) and "role" in saved_profile and "tenure" in saved_profile:
+        st.session_state.user_profile = saved_profile
+    if isinstance(saved_chat, list):
+        st.session_state.chat_history = saved_chat[-MAX_CHAT_MESSAGES:]
+
+
+def save_profile_to_ls(profile_dict):
+    """Save user profile to localStorage."""
+    profile_json = json.dumps(profile_dict)
+    streamlit_js_eval(js_expressions=f"localStorage.setItem('savant_profile', JSON.stringify({profile_json})), null", key=f"save_profile_{time.time()}")
+
+
+def save_chat_to_ls(chat_list):
+    """Save chat history to localStorage (truncated to last MAX_CHAT_MESSAGES)."""
+    truncated = chat_list[-MAX_CHAT_MESSAGES:]
+    chat_json = json.dumps(truncated)
+    streamlit_js_eval(js_expressions=f"localStorage.setItem('savant_chat_history', JSON.stringify({chat_json})), null", key=f"save_chat_{time.time()}")
+
+
+# --- User Onboarding ---
 profile = st.session_state.user_profile
 
 if "role" not in profile or "tenure" not in profile:
@@ -277,6 +331,7 @@ if "role" not in profile or "tenure" not in profile:
     if st.button("✅ Continue", type="primary", use_container_width=True):
         profile["role"] = st.session_state.role_selection
         profile["tenure"] = st.session_state.tenure_selection
+        save_profile_to_ls(profile)
         st.success("You're all set! You can now start asking questions below 👇")
         st.rerun()
     else:
@@ -304,10 +359,6 @@ vectorstore, bm25_index = get_vectorstore()
 # --- OpenAI Client ---
 client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
 
-# --- Chat History ---
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
 # --- Sidebar ---
 if "role" in profile and "tenure" in profile:
     with st.sidebar:
@@ -330,6 +381,18 @@ if "role" in profile and "tenure" in profile:
         selected_label = st.selectbox("🤖 Model", model_labels, index=current_index)
         st.session_state["selected_model"] = model_values[model_labels.index(selected_label)]
         st.caption("Swap models anytime — won't reset your chat")
+
+        st.markdown("---")
+        if st.button("🗑️ Clear Chat", use_container_width=True):
+            st.session_state.chat_history = []
+            streamlit_js_eval(js_expressions="localStorage.removeItem('savant_chat_history'), null", key="clear_chat_ls")
+            st.rerun()
+        if st.button("🔄 Reset Profile", use_container_width=True):
+            st.session_state.user_profile = {}
+            st.session_state.chat_history = []
+            st.session_state.ls_loaded = False
+            streamlit_js_eval(js_expressions="localStorage.removeItem('savant_profile'), localStorage.removeItem('savant_chat_history'), null", key="reset_profile_ls")
+            st.rerun()
 
         with st.expander("ℹ️ How to Use & Support", expanded=False):
             st.markdown("- Ask clear, specific questions")
@@ -433,6 +496,7 @@ if user_input:
 
 st.chat_message("user").markdown(f"<div class='chat-bubble user-bubble'>{html.escape(user_input)}</div>", unsafe_allow_html=True)
 st.session_state.chat_history.append({"role": "user", "content": user_input})
+save_chat_to_ls(st.session_state.chat_history)
 
 # --- Generate Response ---
 with st.spinner("Searching documents..."):
@@ -457,7 +521,8 @@ with st.spinner("Searching documents..."):
                     unsafe_allow_html=True
                 )
                 st.session_state.chat_history.append({"role": "assistant", "content": answer})
-                log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="fallback")
+                save_chat_to_ls(st.session_state.chat_history)
+                log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="fallback", gap_reason="no_docs_retrieved")
                 st.stop()
 
             ranked, rerank_confidence = rerank_chunks(rewritten, docs[:10])
@@ -497,21 +562,6 @@ with st.spinner("Searching documents..."):
             latency = round(time.time() - start_time, 2)
             print(f"[LATENCY] {latency}s — {user_input[:80]}")
 
-            # --- Grounding check ---
-            fallback_phrases = [
-                "do not include", "do not contain", "does not include", "does not contain",
-                "couldn't find", "cannot find", "no specific", "not specifically",
-                "not mentioned", "provided excerpts", "excerpts provided"
-            ]
-            if not any(phrase in answer.lower() for phrase in fallback_phrases):
-                is_grounded = check_grounding(answer, top_chunks, client)
-                if not is_grounded:
-                    answer += GROUNDING_WARNING
-                    placeholder.markdown(
-                        f"<div class='chat-bubble bot-bubble'>{answer}</div>",
-                        unsafe_allow_html=True
-                    )
-
             # --- Citation chips (up to 3 deduplicated sources) ---
             seen_sources = set()
             for doc in ranked[:5]:
@@ -549,11 +599,31 @@ with st.spinner("Searching documents..."):
                     if (bottom) bottom.scrollIntoView({behavior: "smooth"});
                 </script>
             """, unsafe_allow_html=True)
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            save_chat_to_ls(st.session_state.chat_history)
+
+            # --- Grounding check (runs after answer is visible) ---
+            gap_reason = "direct"
+            fallback_phrases = [
+                "do not include", "do not contain", "does not include", "does not contain",
+                "couldn't find", "cannot find", "no specific", "not specifically",
+                "not mentioned", "provided excerpts", "excerpts provided"
+            ]
+            if not any(phrase in answer.lower() for phrase in fallback_phrases):
+                is_grounded = check_grounding(answer, top_chunks, client)
+                if not is_grounded:
+                    gap_reason = "grounding_failed"
+                    answer += GROUNDING_WARNING
+                    placeholder.markdown(
+                        f"<div class='chat-bubble bot-bubble'>{answer}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.session_state.chat_history[-1]["content"] = answer
+                    save_chat_to_ls(st.session_state.chat_history)
+
             # --- Log ---
             source_titles = [doc.metadata.get("source", "unknown") for doc in docs]
-            log_chat_interaction(user_input, answer, profile, source_titles, fallback=False, response_type="direct")
-
-            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            log_chat_interaction(user_input, answer, profile, source_titles, fallback=(gap_reason != "direct"), response_type="direct", gap_reason=gap_reason)
 
         except Exception as e:
             sentry_sdk.capture_exception(e)
@@ -564,3 +634,5 @@ with st.spinner("Searching documents..."):
                 unsafe_allow_html=True
             )
             st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+            save_chat_to_ls(st.session_state.chat_history)
+            log_chat_interaction(user_input, error_msg, profile, [], fallback=True, response_type="error", gap_reason="error")
