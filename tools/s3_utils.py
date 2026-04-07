@@ -20,6 +20,12 @@ def get_s3_client():
         region_name=get_secret("AWS_REGION")
     )
 
+def get_tenant_prefix() -> str:
+    try:
+        return get_secret("TENANT_PREFIX").strip("/")
+    except Exception:
+        return "default"
+
 def upload_file_to_s3(file, filename, bucket):
     s3 = get_s3_client()
     s3.upload_fileobj(file, bucket, filename)

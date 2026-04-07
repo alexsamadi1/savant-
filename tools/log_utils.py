@@ -8,9 +8,12 @@ except ImportError:
     pass
 from tools.s3_utils import download_file_from_s3, upload_file_to_s3
 
-LOG_FILE = "query_logs.csv"
+from tools.s3_utils import get_tenant_prefix
+_tenant = get_tenant_prefix()
+LOG_FILE = f"query_logs_{_tenant}.csv"
+print(f"[TENANT] Log file: {LOG_FILE}")
 S3_BUCKET = get_secret("S3_DOCS_BUCKET")
-S3_KEY = f"logs/{LOG_FILE}"
+S3_KEY = f"logs/{_tenant}/{LOG_FILE}"
 
 def ensure_log_file_exists():
     if not os.path.exists(LOG_FILE):

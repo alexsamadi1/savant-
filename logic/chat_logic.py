@@ -10,7 +10,8 @@ import numpy as np
 _cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 
 # --- Query Rewriting ---
-def rewrite_query(user_input: str, client: OpenAI) -> str:
+def rewrite_query(user_input: str, client: OpenAI) -> tuple:
+    import json
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -18,21 +19,32 @@ def rewrite_query(user_input: str, client: OpenAI) -> str:
                 {
                     "role": "system",
                     "content": (
-                        "You are a search query optimizer for a GovCon knowledge base. "
-                        "Rewrite the user's question into a precise search query that will retrieve the most relevant document chunks. "
-                        "Expand acronyms where helpful (e.g. PTO → paid time off PTO, CUI → controlled unclassified information CUI). "
-                        "Remove conversational filler. Return only the rewritten query, nothing else."
+                        "You are a search query optimizer for a knowledge base. "
+                        "Do two things:\n"
+                        "1. Rewrite the user's question into a precise search query. "
+                        "Expand acronyms where helpful. Remove conversational filler.\n"
+                        "2. Classify the intent as 'synthesis' if the query requires "
+                        "comparing, summarizing, or retrieving information across multiple "
+                        "documents or programs. Classify as 'lookup' if it targets a "
+                        "specific fact from a single document.\n"
+                        "Return JSON only, no markdown: "
+                        "{\"query\": string, \"intent\": \"synthesis\" | \"lookup\"}"
                     )
                 },
                 {"role": "user", "content": user_input}
             ],
             temperature=0,
-            max_tokens=60
+            max_tokens=80
         )
-        rewritten = response.choices[0].message.content.strip()
-        return rewritten if rewritten else user_input
+        result = json.loads(response.choices[0].message.content.strip())
+        query = result.get("query", user_input)
+        intent = result.get("intent", "lookup")
+        if intent not in ("synthesis", "lookup"):
+            intent = "lookup"
+        print(f"[REWRITE] intent={intent} query={query[:80]}")
+        return query, intent
     except Exception:
-        return user_input
+        return user_input, "lookup"
 
 # --- Rerank using Cross-Encoder ---
 def rerank_chunks(query: str, chunks: List[Document]) -> Tuple[List[Document], float]:

@@ -253,6 +253,32 @@ button[data-testid="baseButton-primary"]:hover {
 </style>
 """, unsafe_allow_html=True)
 
+# --- Access Gate ---
+if not st.session_state.get("authenticated", False):
+    st.markdown("""
+    <style>
+    .access-gate-spacer { height: 15vh; }
+    .access-gate .stImage { margin-bottom: 0.5rem; }
+    .access-gate [data-testid="stForm"] { margin-top: 0; }
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown('<div class="access-gate-spacer"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="access-gate">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(brand["logo_path"], use_container_width=True)
+        with st.form("access_gate_form"):
+            access_code = st.text_input("Enter access code", type="password", key="access_code_input")
+            submitted = st.form_submit_button("Continue", type="primary", use_container_width=True)
+            if submitted:
+                if access_code == get_secret("ACCESS_CODE"):
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Invalid access code")
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
+
 # --- Session State Init ---
 if "user_profile" not in st.session_state:
     st.session_state.user_profile = {}
@@ -419,7 +445,11 @@ if "role" in profile and "tenure" in profile:
                         try:
                             raw_text = extract_text_from_docx(uploaded_file) if uploaded_file.name.endswith(".docx") else ""
                             smart_filename = generate_smart_filename(raw_text, uploaded_file.name)
-                            upload_file_to_s3(BytesIO(uploaded_file.getbuffer()), smart_filename, get_secret("S3_DOCS_BUCKET"))
+                            from tools.s3_utils import get_tenant_prefix
+                            tenant_prefix = get_tenant_prefix()
+                            tenant_filename = f"{tenant_prefix}/{smart_filename}"
+                            print(f"[TENANT] Uploading doc to: {tenant_filename}")
+                            upload_file_to_s3(BytesIO(uploaded_file.getbuffer()), tenant_filename, get_secret("S3_DOCS_BUCKET"))
                             st.success(f"Uploaded as `{smart_filename}`")
 
                             with st.spinner("Rebuilding knowledge base... this takes 1-2 minutes"):
@@ -513,8 +543,9 @@ with st.spinner("Searching documents..."):
 
         try:
             start_time = time.time()
-            rewritten = rewrite_query(user_input, client)
-            docs = get_relevant_chunks(rewritten, vectorstore, k=30, bm25_index=bm25_index)
+            rewritten, intent = rewrite_query(user_input, client)
+            k = 30 if intent == "synthesis" else 8
+            docs = get_relevant_chunks(rewritten, vectorstore, k=k, bm25_index=bm25_index)
 
             if not docs:
                 answer = assistant["fallback_message"]

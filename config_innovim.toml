@@ -1,0 +1,31 @@
+[brand]
+app_name = "Innovim Knowledge Assistant"
+company_name = "Innovim"
+sidebar_title = "Innovim Assistant"
+sidebar_caption = "Quick answers from Innovim's program reports."
+footer_text = "Innovim • Powered by Savant"
+
+[contact]
+contact_email = "admin@innovim.com"
+feedback_url = ""
+
+[onboarding]
+role_question = "What is your role?"
+tenure_question = "How long have you been with Innovim?"
+role_options = ["Executive", "Program Manager", "Operations Lead", "Other"]
+tenure_options = ["New Hire (0–30 days)", "1–6 Months", "6+ Months", "2+ Years"]
+
+[assistant]
+welcome_message = "Hi! I'm Innovim's program knowledge assistant. Ask me anything about:"
+topics = ["Monthly program reports", "Program status and milestones", "Cross-program findings", "Budget and schedule variance"]
+sample_questions = [
+    "Which programs are behind schedule?",
+    "Summarize the key findings from the latest reports.",
+    "Compare Program A and Program B performance."
+]
+system_prompt_layer = "You are analyzing monthly program reports for C-suite executives at Innovim. Prioritize cross-program synthesis. Flag any programs showing risk, delay, or budget variance. Use executive-friendly language. Always cite the report month and year for each finding."
+fallback_message = "I wasn't able to find a confident answer in Innovim's program reports. This has been flagged for your administrator to review."
+chat_placeholder = "Ask about program status, milestones, findings..."
+
+[storage]
+s3_docs_bucket = "innovim-hr-docs-1"

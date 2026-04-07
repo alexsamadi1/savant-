@@ -20,8 +20,11 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
     import boto3, botocore
     from pathlib import Path
     from tools.s3_utils import get_secret
+    from tools.s3_utils import get_tenant_prefix
+    tenant_prefix = get_tenant_prefix()
+    print(f"[TENANT] Loading index for tenant: {tenant_prefix}")
 
-    path = Path(index_dir)
+    path = Path(f"faiss_index/{tenant_prefix}")
     faiss_file = path / "index.faiss"
     pkl_file = path / "index.pkl"
 
@@ -37,16 +40,16 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
             region_name=get_secret("AWS_REGION")
         )
         bucket = get_secret("S3_INDEX_BUCKET")
-        s3.download_file(bucket, "index.faiss", str(faiss_file))
-        s3.download_file(bucket, "index.pkl", str(pkl_file))
+        s3.download_file(bucket, f"{tenant_prefix}/index.faiss", str(faiss_file))
+        s3.download_file(bucket, f"{tenant_prefix}/index.pkl", str(pkl_file))
         bm25_file = path / "bm25_index.pkl"
         try:
-            s3.download_file(bucket, "bm25_index.pkl", str(bm25_file))
+            s3.download_file(bucket, f"{tenant_prefix}/bm25_index.pkl", str(bm25_file))
         except Exception:
             pass  # BM25 index may not exist yet (pre-hybrid rebuild)
         manifest_file = path / "manifest.json"
         try:
-            s3.download_file(bucket, "manifest.json", str(manifest_file))
+            s3.download_file(bucket, f"{tenant_prefix}/manifest.json", str(manifest_file))
         except Exception:
             pass  # Manifest may not exist yet (pre-pinning rebuild)
         print("✅ Successfully loaded FAISS index from S3")

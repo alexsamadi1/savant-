@@ -145,7 +145,7 @@ def run_query(question: str, client, vectorstore, bm25_index, cfg) -> dict:
 
     # Step 1: Rewrite query
     t0 = time.time()
-    rewritten = rewrite_query(question, client)
+    rewritten, intent = rewrite_query(question, client)
     rewrite_time = time.time() - t0
 
     # Step 2: Retrieve
