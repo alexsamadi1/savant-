@@ -26,8 +26,9 @@ __pycache__/
 eval_results_*.csv
 savant_eval_set_v2.csv
 
-# --- Query logs ---
-query_logs.csvvenv/
+# Query logs
+query_logs_*.csv
+query_logs.csv
 test_chat.py
 docs/*.pdf
 docs/*.docx

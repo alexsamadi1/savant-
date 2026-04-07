@@ -21,10 +21,17 @@ def get_s3_client():
     )
 
 def get_tenant_prefix() -> str:
+    import os
+    # Shell env var takes priority over secrets.toml
+    # This allows: TENANT_PREFIX=innovim streamlit run app.py
+    env_val = os.environ.get("TENANT_PREFIX", "").strip("/")
+    if env_val:
+        return env_val
     try:
-        return get_secret("TENANT_PREFIX").strip("/")
+        val = get_secret("TENANT_PREFIX").strip("/")
+        return val if val else "demo"
     except Exception:
-        return "default"
+        return "demo"
 
 def upload_file_to_s3(file, filename, bucket):
     s3 = get_s3_client()

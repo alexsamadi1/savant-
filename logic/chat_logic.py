@@ -4,10 +4,16 @@ from openai import OpenAI
 from typing import List, Tuple, Optional
 from langchain_core.documents import Document
 from config_loader import get_config
-from sentence_transformers import CrossEncoder
 import numpy as np
 
-_cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+_cross_encoder = None
+
+def get_cross_encoder():
+    global _cross_encoder
+    if _cross_encoder is None:
+        from sentence_transformers import CrossEncoder
+        _cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    return _cross_encoder
 
 # --- Query Rewriting ---
 def rewrite_query(user_input: str, client: OpenAI) -> tuple:
@@ -51,7 +57,7 @@ def rerank_chunks(query: str, chunks: List[Document]) -> Tuple[List[Document], f
     if not chunks:
         return [], 0.0
     pairs = [[query, chunk.page_content[:512]] for chunk in chunks]
-    scores = _cross_encoder.predict(pairs)
+    scores = get_cross_encoder().predict(pairs)
     ranked_indices = np.argsort(scores)[::-1]
     top_score = float(scores[ranked_indices[0]]) if len(ranked_indices) > 0 else 0.0
     return [chunks[i] for i in ranked_indices], top_score
@@ -217,21 +223,17 @@ def generate_answer_streaming(messages, client, docs=None, model="gpt-4o-mini"):
         return error_gen(), source, page
 
 def build_messages(user_input, context_chunk, profile, fallback=False, conversation_history=None):
+    from tools.prompts import build_system_prompt, build_fallback_system_prompt
     role = profile.get("role", "employee")
     tenure = profile.get("tenure", "unknown tenure")
 
-    company = get_config()['brand']['company_name']
+    config = get_config()
+    company = config['brand']['company_name']
     today = datetime.now().strftime('%B %d, %Y')
+    system_prompt_layer = config.get('assistant', {}).get('system_prompt_layer', '')
 
     if fallback:
-        system_prompt = (
-            f"You are a helpful knowledge assistant trained on {company} internal documentation. "
-            f"The user is a {role} with {tenure} at the company. "
-            f"Today's date is {today}.\n\n"
-            "The question wasn't answered clearly by any one excerpt, but partial context is provided. "
-            "Summarize a helpful answer based on what you can. "
-            "If unsure, advise the user to contact their administrator."
-        )
+        system_prompt = build_fallback_system_prompt(company, role, tenure, today)
         messages = [{"role": "system", "content": system_prompt}]
         if conversation_history:
             messages.extend(conversation_history)
@@ -241,14 +243,7 @@ def build_messages(user_input, context_chunk, profile, fallback=False, conversat
         })
         return messages
     else:
-        system_prompt = (
-            f"You are {company}'s knowledge assistant. The user is a {role} "
-            f"with {tenure} at the company. "
-            f"Today's date is {today}.\n\n"
-            "Your job is to synthesize a clear, accurate answer using the provided context from internal documentation. "
-            "If excerpts cover different aspects of the question, combine them into one cohesive answer. "
-            "Be helpful and professional. If you're unsure, advise the user to contact their administrator."
-        )
+        system_prompt = build_system_prompt(company, role, tenure, today, system_prompt_layer)
 
         if isinstance(context_chunk, list):
             parts = []

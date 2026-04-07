@@ -1,5 +1,28 @@
 from config_loader import get_config
 
+def build_system_prompt(company: str, role: str, tenure: str, today: str, system_prompt_layer: str = "") -> str:
+    base = (
+        f"You are {company}'s knowledge assistant. The user is a {role} "
+        f"with {tenure} at the company. "
+        f"Today's date is {today}.\n\n"
+        "Your job is to synthesize a clear, accurate answer using the provided "
+        "context from internal documentation. "
+        "If excerpts cover different aspects of the question, combine them into "
+        "one cohesive answer. Be helpful and professional. "
+        "If you're unsure, advise the user to contact their administrator."
+    )
+    return f"{base}\n\n{system_prompt_layer}".strip() if system_prompt_layer else base
+
+def build_fallback_system_prompt(company: str, role: str, tenure: str, today: str) -> str:
+    return (
+        f"You are a helpful knowledge assistant trained on {company} internal "
+        f"documentation. The user is a {role} with {tenure} at the company. "
+        f"Today's date is {today}.\n\n"
+        "The question wasn't answered clearly by any one excerpt, but partial "
+        "context is provided. Summarize a helpful answer based on what you can. "
+        "If unsure, advise the user to contact their administrator."
+    )
+
 def build_prompt(query: str, documents: list, role: str = None, tenure: str = None) -> str:
     company_name = get_config()["brand"]["company_name"]
 

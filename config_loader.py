@@ -14,7 +14,7 @@ def get_config() -> dict:
 
         tenant = os.environ.get("TENANT_PREFIX", "").strip("/")
         if tenant:
-            tenant_path = Path(__file__).parent / f"config_{tenant}.toml"
+            tenant_path = Path(__file__).parent / "clients" / f"{tenant}.toml"
             if tenant_path.exists():
                 override = toml.load(tenant_path)
                 for section, values in override.items():
@@ -27,3 +27,8 @@ def get_config() -> dict:
                 print(f"[CONFIG] No tenant config found for: {tenant} — using defaults")
 
     return _config
+
+def reset_config():
+    global _config
+    _config = None
+    print("[CONFIG] Cache cleared — will reload on next get_config() call")

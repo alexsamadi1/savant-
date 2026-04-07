@@ -15,6 +15,9 @@ from tools.s3_utils import get_secret
 from datetime import datetime
 import nltk
 from nltk.stem import PorterStemmer
+import logging
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 
 _stemmer = PorterStemmer()
 
@@ -212,36 +215,7 @@ def rebuild_vectorstore_from_s3():
     embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
     vectorstore = FAISS.from_documents(chunks, embeddings)
 
-    # Save locally to the correct location
-    index_dir = f"faiss_index/{tenant_prefix}"
-    os.makedirs(index_dir, exist_ok=True)
-    vectorstore.save_local(index_dir)
-    print(f"💾 Saved vectorstore locally to {index_dir}/")
-
-    # Build and save BM25 index
-    from rank_bm25 import BM25Okapi
-    texts = [chunk.page_content for chunk in chunks]
-    metadatas = [chunk.metadata for chunk in chunks]
-    bm25_corpus = [tokenize_for_bm25(t) for t in texts]
-    bm25_obj = BM25Okapi(bm25_corpus)
-    with open(f"{index_dir}/bm25_index.pkl", "wb") as f:
-        pickle.dump((bm25_obj, texts, metadatas), f)
-    print(f"💾 Saved BM25 index locally to {index_dir}/bm25_index.pkl")
-
-    # Write manifest
-    manifest = {"embedding_model": "text-embedding-ada-002", "created_at": datetime.now().isoformat()}
-    with open(f"{index_dir}/manifest.json", "w") as f:
-        json.dump(manifest, f)
-
-    # Upload to S3
-    try:
-        s3.upload_file(f"{index_dir}/index.faiss", index_bucket, f"{tenant_prefix}/index.faiss")
-        s3.upload_file(f"{index_dir}/index.pkl", index_bucket, f"{tenant_prefix}/index.pkl")
-        s3.upload_file(f"{index_dir}/bm25_index.pkl", index_bucket, f"{tenant_prefix}/bm25_index.pkl")
-        s3.upload_file(f"{index_dir}/manifest.json", index_bucket, f"{tenant_prefix}/manifest.json")
-        print("☁️ Uploaded new index to S3")
-    except Exception as e:
-        print(f"⚠️ Could not upload index to S3: {e}")
+    _save_and_upload_index(vectorstore, chunks, s3, index_bucket, tenant_prefix)
 
     return doc_count, len(chunks)
 
@@ -321,6 +295,36 @@ def add_contextual_embeddings(chunks, api_key):
 
     return chunks
 
+
+def _save_and_upload_index(vectorstore, all_chunks, s3, index_bucket, tenant_prefix):
+    index_dir = f"faiss_index/{tenant_prefix}"
+    os.makedirs(index_dir, exist_ok=True)
+    vectorstore.save_local(index_dir)
+    print(f"💾 Saved locally to {index_dir}/")
+
+    from rank_bm25 import BM25Okapi
+    texts = [chunk.page_content for chunk in all_chunks]
+    metadatas = [chunk.metadata for chunk in all_chunks]
+    bm25_corpus = [tokenize_for_bm25(t) for t in texts]
+    bm25_obj = BM25Okapi(bm25_corpus)
+    with open(f"{index_dir}/bm25_index.pkl", "wb") as f:
+        pickle.dump((bm25_obj, texts, metadatas), f)
+
+    manifest = {
+        "embedding_model": "text-embedding-ada-002",
+        "created_at": datetime.now().isoformat()
+    }
+    with open(f"{index_dir}/manifest.json", "w") as f:
+        json.dump(manifest, f)
+
+    try:
+        s3.upload_file(f"{index_dir}/index.faiss", index_bucket, f"{tenant_prefix}/index.faiss")
+        s3.upload_file(f"{index_dir}/index.pkl", index_bucket, f"{tenant_prefix}/index.pkl")
+        s3.upload_file(f"{index_dir}/bm25_index.pkl", index_bucket, f"{tenant_prefix}/bm25_index.pkl")
+        s3.upload_file(f"{index_dir}/manifest.json", index_bucket, f"{tenant_prefix}/manifest.json")
+        print("☁️ Uploaded new index to S3")
+    except Exception as e:
+        print(f"⚠️ Could not upload to S3: {e}")
 
 def rebuild_vectorstore_enriched():
     """
@@ -402,33 +406,6 @@ def rebuild_vectorstore_enriched():
     embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
     vectorstore = FAISS.from_documents(all_chunks, embeddings)
 
-    index_dir = f"faiss_index/{tenant_prefix}"
-    os.makedirs(index_dir, exist_ok=True)
-    vectorstore.save_local(index_dir)
-    print(f"💾 Saved locally to {index_dir}/")
-
-    # Build and save BM25 index
-    from rank_bm25 import BM25Okapi
-    texts = [chunk.page_content for chunk in all_chunks]
-    metadatas = [chunk.metadata for chunk in all_chunks]
-    bm25_corpus = [tokenize_for_bm25(t) for t in texts]
-    bm25_obj = BM25Okapi(bm25_corpus)
-    with open(f"{index_dir}/bm25_index.pkl", "wb") as f:
-        pickle.dump((bm25_obj, texts, metadatas), f)
-    print(f"💾 Saved BM25 index locally to {index_dir}/bm25_index.pkl")
-
-    # Write manifest
-    manifest = {"embedding_model": "text-embedding-ada-002", "created_at": datetime.now().isoformat()}
-    with open(f"{index_dir}/manifest.json", "w") as f:
-        json.dump(manifest, f)
-
-    try:
-        s3.upload_file(f"{index_dir}/index.faiss", index_bucket, f"{tenant_prefix}/index.faiss")
-        s3.upload_file(f"{index_dir}/index.pkl", index_bucket, f"{tenant_prefix}/index.pkl")
-        s3.upload_file(f"{index_dir}/bm25_index.pkl", index_bucket, f"{tenant_prefix}/bm25_index.pkl")
-        s3.upload_file(f"{index_dir}/manifest.json", index_bucket, f"{tenant_prefix}/manifest.json")
-        print("☁️ Uploaded new index to S3")
-    except Exception as e:
-        print(f"⚠️ Could not upload to S3: {e}")
+    _save_and_upload_index(vectorstore, all_chunks, s3, index_bucket, tenant_prefix)
 
     return doc_count, len(all_chunks)

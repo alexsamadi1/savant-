@@ -54,10 +54,24 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
             pass  # Manifest may not exist yet (pre-pinning rebuild)
         print("✅ Successfully loaded FAISS index from S3")
 
-    except botocore.exceptions.BotoCoreError as e:
-        print("⚠️ Failed to load from S3, falling back to local. Error:", e)
+    except Exception as e:
+        print(f"⚠️ Failed to load from S3: {e}")
         if not faiss_file.exists() or not pkl_file.exists():
-            raise FileNotFoundError("❌ No local index found either. Cannot load vectorstore.")
+            print(f"[TENANT] No index found — starting background rebuild...")
+            import threading
+            def background_rebuild():
+                try:
+                    from tools.vectorstore_builder import rebuild_vectorstore_enriched
+                    doc_count, chunk_count = rebuild_vectorstore_enriched()
+                    print(f"[TENANT] Background rebuild complete: {doc_count} docs, {chunk_count} chunks")
+                except Exception as rebuild_error:
+                    print(f"[TENANT] Background rebuild failed: {rebuild_error}")
+            thread = threading.Thread(target=background_rebuild, daemon=True)
+            thread.start()
+            raise FileNotFoundError(
+                f"Knowledge base is being built for the first time. "
+                f"Please refresh in 2-3 minutes."
+            )
 
     # Check manifest for embedding model compatibility
     manifest_file = path / "manifest.json"
