@@ -1,49 +1,124 @@
-from langchain_community.document_loaders import PyPDFLoader
+import pdfplumber
 from langchain_core.documents import Document
 from docx import Document as DocxDocument
 import re
 
 def enrich_pdf_chunks(pdf_path: str) -> list:
-    loader = PyPDFLoader(pdf_path)
-    raw_pages = loader.load()
-    enriched_chunks = []
+    chunks = []
 
-    section_pattern = re.compile(r"\n?(\d{3,4}\s+[A-Z][^\n]{3,}|[A-Z][A-Za-z\s]+\n)")
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            # Extract tables first as structured text
+            table_texts = []
+            for table in page.extract_tables():
+                if not table:
+                    continue
+                rows = []
+                for row in table:
+                    cleaned = [cell.strip() if cell else "" for cell in row]
+                    non_empty = [c for c in cleaned if c]
+                    if non_empty:
+                        rows.append(" | ".join(non_empty))
+                if rows:
+                    table_texts.append("\n".join(rows))
 
-    for page_num, page in enumerate(raw_pages):
-        text = page.page_content
-        matches = list(section_pattern.finditer(text))
-        positions = [m.start() for m in matches]
-
-        if not positions:
-            enriched_chunks.append(Document(
-                page_content=text.strip(),
-                metadata={"source": f"document_page_{page_num + 1}"}
-            ))
-            continue
-
-        positions.append(len(text))  # end of last section
-
-        for i in range(len(positions) - 1):
-            chunk_text = text[positions[i]:positions[i + 1]].strip()
-            title_line = chunk_text.split("\n")[0].strip()
-            title = re.sub(r"[^\w\s:]", "", title_line)
-
-            enriched_text = (
-                f"SECTION: {title}\n"
-                f"Keywords: policy, procedures, guidelines, onboarding, processes, workflows, documentation, organization.\n\n"
-                f"{chunk_text}"
+            # Extract text words with font size for heading detection
+            words = page.extract_words(
+                extra_attrs=["size", "fontname"],
+                keep_blank_chars=False
             )
+            if not words:
+                continue
 
-            enriched_chunks.append(Document(
-                page_content=enriched_text,
-                metadata={
-                    "source": f"document_page_{page_num + 1}",
-                    "section_title": title
-                }
-            ))
+            # Detect dominant body font size
+            sizes = [w.get("size", 12) for w in words]
+            body_size = sorted(sizes)[len(sizes) // 2]  # median
+            heading_threshold = body_size * 1.15
 
-    return enriched_chunks
+            # Rebuild text with heading markers
+            lines = []
+            current_line = []
+            current_y = None
+
+            for word in words:
+                y = round(word["top"], 1)
+                if current_y is None:
+                    current_y = y
+                if abs(y - current_y) > 3:
+                    if current_line:
+                        line_text = " ".join(current_line)
+                        lines.append(line_text)
+                    current_line = [word["text"]]
+                    current_y = y
+                else:
+                    current_line.append(word["text"])
+            if current_line:
+                lines.append(" ".join(current_line))
+
+            # Split into sections by heading detection
+            current_heading = f"Page {page_num + 1}"
+            current_body = []
+
+            for line in lines:
+                line_words = [w for w in words
+                              if line.startswith(w["text"][:min(5, len(w["text"]))])]
+                is_heading = False
+                if line_words:
+                    avg_size = sum(
+                        w.get("size", body_size) for w in line_words
+                    ) / len(line_words)
+                    is_heading = (
+                        avg_size >= heading_threshold and
+                        len(line) < 120 and
+                        len(line.split()) <= 12
+                    )
+
+                if is_heading and current_body:
+                    body_text = "\n".join(current_body)
+                    if table_texts:
+                        body_text += "\n\n" + "\n\n".join(table_texts)
+                        table_texts = []
+                    enriched = (
+                        f"SECTION: {current_heading}\n"
+                        f"Keywords: policy, procedures, guidelines, onboarding, "
+                        f"processes, workflows, documentation, organization.\n\n"
+                        f"{body_text}"
+                    )
+                    chunks.append(Document(
+                        page_content=enriched,
+                        metadata={
+                            "source": f"document_page_{page_num + 1}",
+                            "section_title": current_heading
+                        }
+                    ))
+                    current_heading = line
+                    current_body = []
+                else:
+                    current_body.append(line)
+
+            # Flush remaining content
+            if current_body:
+                body_text = "\n".join(current_body)
+                if table_texts:
+                    body_text += "\n\n" + "\n\n".join(table_texts)
+                enriched = (
+                    f"SECTION: {current_heading}\n"
+                    f"Keywords: policy, procedures, guidelines, onboarding, "
+                    f"processes, workflows, documentation, organization.\n\n"
+                    f"{body_text}"
+                )
+                chunks.append(Document(
+                    page_content=enriched,
+                    metadata={
+                        "source": f"document_page_{page_num + 1}",
+                        "section_title": current_heading
+                    }
+                ))
+
+    return chunks if chunks else [Document(
+        page_content="",
+        metadata={"source": "document_page_1"}
+    )]
 
 def chunk_docx_with_metadata(docx_path: str) -> list:
     doc = DocxDocument(docx_path)
