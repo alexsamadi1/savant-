@@ -30,13 +30,15 @@ Savant is a RAG (Retrieval-Augmented Generation) knowledge assistant built with 
 ### Request Flow
 
 1. User submits query via Streamlit chat input
-2. FAISS vectorstore returns top-10 similar document chunks (`tools/vectorstore_builder.py:get_relevant_chunks`)
-3. GPT reranks to the single best chunk (`logic/chat_logic.py:rerank_with_gpt`)
-4. System prompt is built with user's role/tenure profile (`tools/prompts.py`)
-5. GPT generates a draft answer (`logic/chat_logic.py:generate_answer`)
-6. GPT revises the draft for clarity/tone (`logic/chat_logic.py:revise_answer_with_gpt`)
-7. Answer streams to the UI character-by-character with a citation (source document + page)
-8. Interaction is logged to CSV and uploaded to S3 (`tools/log_utils.py`)
+2. Query is rewritten + classified by intent (lookup vs synthesis) — `rewrite_query()` in `chat_logic.py`
+3. Hybrid retrieval (FAISS + BM25 + RRF), k=8 for lookup, k=30 for synthesis — `get_relevant_chunks()` in `vectorstore_builder.py`
+4. Cross-encoder reranking of top 10 — `rerank_chunks()` in `chat_logic.py`
+5. Last 3 conversation pairs injected as multi-turn context
+6. System prompt built with user profile + optional tenant system prompt layer — `build_messages()` in `chat_logic.py`
+7. Answer streams to UI token-by-token — `generate_answer_streaming()`
+8. Citation chips rendered for up to 3 deduplicated sources
+9. Async grounding check runs post-stream — `check_grounding()`
+10. Interaction logged to tenant-specific CSV, uploaded to S3
 
 ### Key Files
 
@@ -106,10 +108,10 @@ Unlocked by entering `ADMIN_CODE` in the sidebar:
 
 ## Known Weaknesses (Active TODO)
 
-- Reranker currently returns only 1 chunk — should pass top 3 into generation
-- No eval harness yet — RAG accuracy is unmeasured
-- Still on OpenAI — Claude API migration is planned
-- No test suite configured
+- suggest_follow_ups() not yet wired into app.py (Task 42)
+- PPTX and XLSX ingestion not yet supported (Phase 6)
+- Hard auth (OAuth domain restriction) not yet built (Phase 6)
+- Audit logging not yet built (Phase 6)
 
 ---
 
