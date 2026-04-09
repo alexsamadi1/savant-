@@ -20,6 +20,14 @@ import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 
+# --- File Map ---
+# tokenize_for_bm25()          Line ~30  — BM25 tokenizer (stemming, stopwords)
+# get_relevant_chunks()        Line ~180 — Hybrid retrieval (FAISS + BM25 + RRF)
+# rebuild_vectorstore_from_s3() Line ~80 — Basic rebuild from S3
+# rebuild_vectorstore_enriched() Line ~300 — Full rebuild with contextual embeddings
+# add_contextual_embeddings()  Line ~240 — GPT-powered chunk contextualization
+# _save_and_upload_index()     Line ~270 — Save locally + upload to S3
+
 _stemmer = PorterStemmer()
 
 def tokenize_for_bm25(text: str) -> list:
@@ -46,31 +54,6 @@ def get_openai_api_key():
     if not key:
         raise ValueError("❌ OPENAI_API_KEY is not set. Please check your .env file or Streamlit secrets.")
     return key
-
-def rebuild_vectorstore_from_docs(docs_path="docs", faiss_path="faiss_index"):
-    docs_path = Path(docs_path)
-    all_docs = []
-
-    for doc_file in docs_path.glob("*"):
-        if doc_file.suffix == ".pdf":
-            loader = PyPDFLoader(str(doc_file))
-        elif doc_file.suffix == ".docx":
-            loader = UnstructuredWordDocumentLoader(str(doc_file))
-        else:
-            continue
-        all_docs.extend(loader.load())
-
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = splitter.split_documents(all_docs)
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
-
-    faiss_path = "faiss_index/index"
-    vectorstore = FAISS.from_documents(chunks, embeddings)
-    os.makedirs("faiss_index", exist_ok=True)
-    vectorstore.save_local(faiss_path)
-    vectorstore.persist()
-    return len(all_docs), len(chunks)
-
 
 def rebuild_vectorstore_from_s3():
     """

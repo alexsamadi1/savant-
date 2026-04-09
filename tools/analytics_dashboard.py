@@ -237,6 +237,19 @@ def show_gap_analysis_panel():
                 result = run_gap_analysis(s3, bucket)
 
             st.session_state["gap_analysis_result"] = result
+
+            try:
+                from tools.s3_utils import get_tenant_prefix
+                tenant = get_tenant_prefix()
+                s3.put_object(
+                    Bucket=bucket,
+                    Key=f"logs/{tenant}/gap_analysis_latest.json",
+                    Body=json.dumps(result),
+                    ContentType="application/json"
+                )
+                print("[GAP] Persisted gap analysis result to S3")
+            except Exception as e:
+                print(f"[GAP] Could not persist result: {e}")
         except Exception as e:
             st.error(f"Gap analysis failed: {e}")
             print(f"[GAP ANALYSIS] Error: {e}")

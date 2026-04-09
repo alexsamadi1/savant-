@@ -26,6 +26,20 @@ def get_config() -> dict:
             else:
                 print(f"[CONFIG] No tenant config found for: {tenant} — using defaults")
 
+        REQUIRED_TENANT_KEYS = {
+            "assistant": ["welcome_message", "sample_questions",
+                          "fallback_message", "chat_placeholder"],
+            "brand": ["app_name", "company_name"],
+            "contact": ["contact_email"]
+        }
+
+        if tenant:
+            for section, keys in REQUIRED_TENANT_KEYS.items():
+                for key in keys:
+                    if key not in _config.get(section, {}):
+                        print(f"[CONFIG] WARNING: {tenant} config missing "
+                              f"{section}.{key} — using default")
+
     return _config
 
 def reset_config():

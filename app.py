@@ -34,6 +34,10 @@ import json
 import nltk
 from streamlit_js_eval import streamlit_js_eval
 
+# ============================================================
+# SECTION: Configuration & Page Setup
+# ============================================================
+
 # --- Load Config ---
 cfg = get_config()
 brand = cfg["brand"]
@@ -62,6 +66,10 @@ ensure_nltk_resources(['punkt', 'averaged_perceptron_tagger'])
 
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
+
+# ============================================================
+# SECTION: CSS Styling
+# ============================================================
 
 # --- Global CSS ---
 st.markdown("""
@@ -256,6 +264,10 @@ button[data-testid="baseButton-primary"]:hover {
 </style>
 """, unsafe_allow_html=True)
 
+# ============================================================
+# SECTION: Access Gate
+# ============================================================
+
 # --- Access Gate ---
 if not st.session_state.get("authenticated", False):
     st.markdown("""
@@ -301,11 +313,17 @@ if not st.session_state.get("authenticated", False):
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
+# ============================================================
+# SECTION: Session State & localStorage Persistence
+# ============================================================
+
 # --- Session State Init ---
 if "user_profile" not in st.session_state:
     st.session_state.user_profile = {}
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "session_start_ts" not in st.session_state:
+    st.session_state["session_start_ts"] = time.time()
 
 # --- localStorage Persistence ---
 MAX_CHAT_MESSAGES = 50
@@ -361,6 +379,10 @@ def save_profile_to_ls(profile_dict):
     streamlit_js_eval(js_expressions=f"localStorage.setItem('savant_profile', JSON.stringify({profile_json})), null", key=f"save_profile_{time.time()}")
 
 
+# ============================================================
+# SECTION: User Onboarding
+# ============================================================
+
 # --- User Onboarding ---
 profile = st.session_state.user_profile
 
@@ -404,6 +426,10 @@ if st.session_state.get("show_analytics", False):
     show_analytics_dashboard()
     st.stop()
 
+# ============================================================
+# SECTION: Vectorstore Loading
+# ============================================================
+
 # --- Load Vectorstore ---
 @st.cache_resource(show_spinner="🔍 Loading knowledge base...")
 def get_vectorstore():
@@ -427,6 +453,7 @@ def get_vectorstore():
                 if objects:
                     latest = max(o["LastModified"] for o in objects)
                     st.session_state["kb_last_updated"] = latest.strftime("%b %d, %Y")
+                    st.session_state["kb_last_updated_ts"] = latest.timestamp()
                 else:
                     st.session_state["kb_last_updated"] = "N/A"
             except Exception as e:
@@ -443,7 +470,17 @@ def get_vectorstore():
             st.error("Knowledge base not found. Please contact your administrator.")
         st.stop()
     except Exception as e:
-        st.error("Could not load the knowledge base. Please try refreshing the page.")
+        err = str(e).lower()
+        if "timeout" in err or "connection" in err:
+            st.warning(
+                "⏳ Savant is waking up — please refresh in 30 seconds. "
+                "This happens occasionally after a period of inactivity."
+            )
+        else:
+            st.error(
+                "Could not load the knowledge base. "
+                "Please try refreshing the page or contact your administrator."
+            )
         print(f"[ERROR] Vectorstore load failed: {e}")
         st.stop()
 
@@ -452,6 +489,10 @@ st.session_state["app_healthy"] = True
 
 # --- OpenAI Client ---
 client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
+
+# ============================================================
+# SECTION: Sidebar
+# ============================================================
 
 # --- Sidebar ---
 if "role" in profile and "tenure" in profile:
@@ -470,6 +511,30 @@ if "role" in profile and "tenure" in profile:
             st.session_state.chat_history = []
             streamlit_js_eval(js_expressions="localStorage.removeItem('savant_chat_history'), null", key="clear_chat_ls")
             st.rerun()
+
+        with st.expander("✏️ Edit Profile"):
+            new_role = st.selectbox(
+                "Role",
+                onboarding["role_options"],
+                index=onboarding["role_options"].index(profile.get("role", onboarding["role_options"][0]))
+                if profile.get("role") in onboarding["role_options"] else 0,
+                key="edit_role"
+            )
+            has_tenure_edit = "tenure_options" in onboarding and onboarding["tenure_options"]
+            if has_tenure_edit:
+                new_tenure = st.selectbox(
+                    "Tenure",
+                    onboarding["tenure_options"],
+                    index=onboarding["tenure_options"].index(profile.get("tenure", onboarding["tenure_options"][0]))
+                    if profile.get("tenure") in onboarding["tenure_options"] else 0,
+                    key="edit_tenure"
+                )
+            if st.button("Save", key="save_profile_edit"):
+                profile["role"] = new_role
+                profile["tenure"] = new_tenure if has_tenure_edit else "N/A"
+                save_profile_to_ls(profile)
+                st.success("Profile updated")
+                st.rerun()
 
         models_cfg = get_config()["models"]
         if "selected_model" not in st.session_state:
@@ -519,6 +584,28 @@ if "role" in profile and "tenure" in profile:
                 if uploaded_file:
                     if uploaded_file.name != st.session_state.get("last_uploaded_file"):
                         try:
+                            if uploaded_file.name.endswith(".pdf"):
+                                try:
+                                    import pdfplumber
+                                    with pdfplumber.open(BytesIO(uploaded_file.getbuffer())) as pdf:
+                                        total_words = sum(
+                                            len(page.extract_words())
+                                            for page in pdf.pages[:3]
+                                        )
+                                    if total_words < 50:
+                                        st.warning(
+                                            "⚠️ This PDF appears to have very little extractable text — "
+                                            "it may be scanned or image-based. "
+                                            "For best results, upload a text-based PDF or DOCX version."
+                                        )
+                                        if not st.checkbox(
+                                            "Upload anyway (results may be limited)",
+                                            key="upload_scanned_confirm"
+                                        ):
+                                            st.stop()
+                                    uploaded_file.seek(0)
+                                except Exception:
+                                    uploaded_file.seek(0)
                             raw_text = extract_text_from_docx(uploaded_file) if uploaded_file.name.endswith(".docx") else ""
                             smart_filename = generate_smart_filename(raw_text, uploaded_file.name)
                             from tools.s3_utils import get_tenant_prefix
@@ -528,10 +615,18 @@ if "role" in profile and "tenure" in profile:
                             upload_file_to_s3(BytesIO(uploaded_file.getbuffer()), tenant_filename, get_secret("S3_DOCS_BUCKET"))
                             st.success(f"Uploaded as `{smart_filename}`")
 
-                            with st.spinner("Rebuilding knowledge base... this takes 1-2 minutes"):
-                                from tools.vectorstore_builder import rebuild_vectorstore_enriched
-                                doc_count, chunk_count = rebuild_vectorstore_enriched()
-                                st.success(f"✅ Knowledge base updated — {doc_count} documents, {chunk_count} chunks indexed")
+                            rebuild_status = st.empty()
+                            stages = [
+                                "📥 Reading document...",
+                                "🔍 Extracting sections...",
+                                "🧠 Building knowledge index...",
+                            ]
+                            for stage in stages:
+                                rebuild_status.info(stage)
+                                time.sleep(0.5)
+                            from tools.vectorstore_builder import rebuild_vectorstore_enriched
+                            doc_count, chunk_count = rebuild_vectorstore_enriched()
+                            rebuild_status.success(f"✅ Knowledge base updated — {doc_count} documents, {chunk_count} chunks indexed")
 
                             st.session_state.last_uploaded_file = uploaded_file.name
                             st.cache_resource.clear()
@@ -561,12 +656,41 @@ if "role" in profile and "tenure" in profile:
             unsafe_allow_html=True
         )
 
+# ============================================================
+# SECTION: Main Chat UI
+# ============================================================
+
 # --- Main Header ---
 st.markdown(f"<h1 style='text-align: center;'>{brand['app_name']} Assistant</h1>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align: center; color: #888; font-size: 1rem;'>{assistant.get('subtitle', '')}</p>", unsafe_allow_html=True)
 
+if st.session_state.get("is_admin"):
+    gap_result = st.session_state.get("gap_analysis_result")
+    if gap_result:
+        gaps = len(gap_result.get("coverage_gaps", []))
+        conflicts = len(gap_result.get("missing_common_docs", []))
+        score = gap_result.get("health_score", 0)
+        color = "#00C9A7" if score >= 70 else "#f0ad4e" if score >= 40 else "#d9534f"
+        if gaps > 0 or conflicts > 0:
+            st.markdown(
+                f"<div style='text-align:center;margin-bottom:0.5rem;'>"
+                f"<span style='font-size:0.8rem;color:{color};cursor:pointer;'>"
+                f"⚠️ {gaps} knowledge gap{'s' if gaps != 1 else ''} detected "
+                f"· KB Health: {score}/100 → "
+                f"<a href='#' onclick='void(0)' style='color:{color};'>View Dashboard</a>"
+                f"</span></div>",
+                unsafe_allow_html=True
+            )
+            if st.button("📊 Open Admin Dashboard",
+                        key="header_dashboard_btn",
+                        use_container_width=False):
+                st.session_state.show_analytics = True
+                st.rerun()
+
 # --- Sample Questions ---
-examples = assistant["sample_questions"]
+import random
+all_examples = assistant["sample_questions"]
+examples = random.sample(all_examples, min(3, len(all_examples)))
 with st.expander("💡 Try a sample question", expanded=False):
     cols = st.columns(len(examples))
     for i, q in enumerate(examples):
@@ -593,6 +717,15 @@ if not st.session_state.chat_history and "example_question" not in st.session_st
                 f"</div>",
                 unsafe_allow_html=True
             )
+            last_ts = st.session_state.get("kb_last_updated_ts")
+            session_start = st.session_state.get("session_start_ts")
+            if last_ts and session_start and last_ts > session_start:
+                st.markdown(
+                    "<div style='font-size:0.8rem;color:#00C9A7;"
+                    "margin-top:4px;padding-left:8px;'>"
+                    "✨ New documents added since your last visit</div>",
+                    unsafe_allow_html=True
+                )
 
 # --- Chat History Display ---
 for entry in st.session_state.chat_history:
@@ -621,6 +754,10 @@ if user_input:
 
 st.chat_message("user").markdown(f"<div class='chat-bubble user-bubble'>{html.escape(user_input)}</div>", unsafe_allow_html=True)
 st.session_state.chat_history.append({"role": "user", "content": user_input})
+
+# ============================================================
+# SECTION: Response Generation Pipeline
+# ============================================================
 
 # --- Generate Response ---
 with st.chat_message("assistant"):
@@ -744,6 +881,21 @@ with st.chat_message("assistant"):
                     )
                 if len(seen_sources) >= 3:
                     break
+
+            # --- Copy to clipboard ---
+            copy_text = answer
+            first_citation = next(iter(seen_sources), None)
+            if first_citation:
+                clean = first_citation.replace("_", " ").strip().title()
+                copy_text = f"{answer}\n\nSource: {clean}"
+
+            if st.button("📋 Copy answer", key=f"copy_{len(st.session_state.chat_history)}"):
+                st.components.v1.html(
+                    f"<script>navigator.clipboard.writeText({json.dumps(copy_text)});</script>",
+                    height=0
+                )
+                st.toast("Copied to clipboard", icon="✅")
+
             # --- Feedback ---
             if gap_reason != "error":
                 feedback_key = f"feedback_{len(st.session_state.chat_history)}"

@@ -6,6 +6,19 @@ from langchain_core.documents import Document
 from config_loader import get_config
 import numpy as np
 
+# --- Live Pipeline (in order of execution) ---
+# 1. rewrite_query()           — rewrites query + classifies intent
+# 2. rerank_chunks()           — cross-encoder reranking
+# 3. build_messages()          — builds OpenAI message array
+# 4. generate_answer_streaming() — streams answer tokens
+# 5. check_grounding()         — post-stream grounding audit
+#
+# --- Utilities ---
+# suggest_follow_ups()         — not yet wired into app.py (Task 42)
+#
+# --- Non-streaming (used by run_eval.py only) ---
+# generate_answer()            — non-streaming version for eval harness
+
 _cross_encoder = None
 
 def get_cross_encoder():
@@ -61,74 +74,6 @@ def rerank_chunks(query: str, chunks: List[Document]) -> Tuple[List[Document], f
     ranked_indices = np.argsort(scores)[::-1]
     top_score = float(scores[ranked_indices[0]]) if len(ranked_indices) > 0 else 0.0
     return [chunks[i] for i in ranked_indices], top_score
-# --- Fallback Summarization ---
-def summarize_fallback(query, chunks: List[Document], client: OpenAI) -> str:
-    fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in chunks[:3]])
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                f"You are a helpful knowledge assistant trained on {get_config()['brand']['company_name']}'s internal documentation. "
-                "Summarize a cautious answer using the text provided. If unclear, advise the user to contact their administrator. "
-                "Never fabricate organization-specific policies."
-            )
-        },
-        {
-            "role": "user",
-            "content": f"User question: {query}\n\nPartial content:\n{fallback_context}"
-        }
-    ]
-
-    try:
-        response = client.chat.completions.create(model="gpt-3.5-turbo", messages=messages)
-        return response.choices[0].message.content.strip()
-    except Exception:
-        return "I'm not confident I can answer that directly. Please check the source documentation or contact your administrator for guidance."
-
-# --- Answer Revision ---
-def revise_answer_with_gpt(question, draft_answer, client: OpenAI, model: str = "gpt-4o-mini") -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are editing a draft answer for clarity and tone.\n\n"
-                "CRITICAL RULES:\n"
-                "1. You MUST preserve all specific facts, numbers, dates, and policies from the draft\n"
-                "2. Do NOT add any information that is not in the draft\n"
-                "3. Do NOT replace the draft content with different information\n"
-                "4. Only improve the clarity, tone, and readability\n"
-                "5. Never start with a greeting like 'Hi there' or 'Hello'\n"
-                "6. Never refer to the company by name — use 'your company' or 'the organization'\n"
-                "7. If the draft states a specific fact or number, the final answer must preserve it exactly\n"
-                "8. Keep the same length — do not expand or summarize drastically"
-            )
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Question: {question}\n\n"
-                f"Draft answer to improve (keep all facts exactly):\n{draft_answer}"
-            )
-        }
-    ]
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0
-        )
-        revised = response.choices[0].message.content.strip()
-        
-        # Safety check — if revised answer is completely different length it went wrong
-        # Fall back to draft in that case
-        if len(revised) < len(draft_answer) * 0.4:
-            return draft_answer
-            
-        return revised
-    except Exception:
-        return draft_answer
 
 def generate_answer(messages, client, docs=None, model: str = "gpt-4o-mini") -> Tuple[str, str, Optional[int]]:
     """

@@ -80,6 +80,17 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
             manifest = json.load(f)
         if manifest.get("embedding_model") != "text-embedding-ada-002":
             print(f"⚠️ WARNING: Index was built with {manifest.get('embedding_model')} but current model is text-embedding-ada-002. Rebuild required.")
+        created = manifest.get("created_at", "")
+        if created:
+            try:
+                from datetime import datetime
+                created_dt = datetime.fromisoformat(created)
+                age_days = (datetime.now() - created_dt.replace(tzinfo=None)).days
+                if age_days > 30:
+                    print(f"[INDEX] WARNING: Index is {age_days} days old — "
+                          f"consider rebuilding if new documents have been added")
+            except Exception:
+                pass
 
     # Load FAISS from local files
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
@@ -96,46 +107,4 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
         print("⚠️ No BM25 index found — falling back to FAISS-only search")
 
     return faiss_vectorstore, bm25_index
-
-# --- Build and Save Combined Vectorstore ---
-def build_combined_vectorstore(pdf_path: str, docx_path: str, index_path: str, api_key: str):
-    import toml
-
-    print("📥 Enriching PDF handbook...")
-    pdf_chunks = enrich_pdf_chunks(pdf_path)
-
-    print("📥 Chunking DOCX orientation guide...")
-    docx_chunks = chunk_docx_with_metadata(docx_path)
-
-    all_chunks = pdf_chunks + docx_chunks
-    print(f"✅ Total chunks: {len(all_chunks)}")
-
-    embeddings = OpenAIEmbeddings(openai_api_key=api_key)
-    vectorstore = FAISS.from_documents(all_chunks, embeddings)
-    vectorstore.save_local(index_path)
-    print(f"✅ Vectorstore saved to: {index_path}/")
-
-    # ✅ Upload to S3 after saving locally
-    secrets = toml.load(".streamlit/secrets.toml")
-    upload_index_to_s3(index_path, secrets["S3_INDEX_BUCKET"])
-
-    return vectorstore
-
-def upload_index_to_s3(index_path: str, bucket: str, secrets_path=".streamlit/secrets.toml"):
-    import boto3, toml
-    from pathlib import Path
-
-    secrets = toml.load(secrets_path)
-    s3 = boto3.client(
-        "s3",
-        aws_access_key_id=secrets["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=secrets["AWS_SECRET_ACCESS_KEY"],
-        region_name=secrets["AWS_REGION"]
-    )
-
-    index_files = ["index.faiss", "index.pkl"]
-    for file_name in index_files:
-        local_path = Path(index_path) / file_name
-        s3.upload_file(str(local_path), bucket, file_name)
-        print(f"☁️ Uploaded {file_name} to S3 bucket {bucket}")
 
