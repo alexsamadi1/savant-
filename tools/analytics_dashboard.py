@@ -71,6 +71,8 @@ def _show_health_score():
 
 
 def show_analytics_dashboard():
+    from tools.log_utils import LOG_FILE
+
     cfg = get_config()
     brand = cfg["brand"]
 
@@ -81,7 +83,7 @@ def show_analytics_dashboard():
         return
 
     try:
-        all_cols = pd.read_csv("query_logs.csv", nrows=0).columns.tolist()
+        all_cols = pd.read_csv(LOG_FILE, nrows=0).columns.tolist()
         use_cols = [
             "timestamp", "session_id", "question", "response",
             "fallback", "response_type", "user_role", "user_tenure",
@@ -89,7 +91,7 @@ def show_analytics_dashboard():
         ]
         if "gap_reason" in all_cols:
             use_cols.append("gap_reason")
-        df = pd.read_csv("query_logs.csv", usecols=use_cols)
+        df = pd.read_csv(LOG_FILE, usecols=use_cols)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["fallback"] = pd.to_numeric(df["fallback"], errors="coerce").fillna(0)
     except FileNotFoundError:
@@ -163,6 +165,9 @@ def show_analytics_dashboard():
 
 
 def show_documents_panel():
+    from tools.s3_utils import get_tenant_prefix
+    tenant_prefix = get_tenant_prefix()
+
     cfg = get_config()
     st.subheader("📁 Loaded documents")
     st.caption("Documents currently in the knowledge base")
@@ -175,7 +180,7 @@ def show_documents_panel():
             region_name=get_secret("AWS_REGION")
         )
         bucket = get_secret("S3_DOCS_BUCKET")
-        response = s3.list_objects_v2(Bucket=bucket)
+        response = s3.list_objects_v2(Bucket=bucket, Prefix=f"{tenant_prefix}/")
 
         if "Contents" not in response:
             st.info("No documents uploaded yet.")

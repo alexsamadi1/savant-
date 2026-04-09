@@ -50,7 +50,7 @@ def rewrite_query(user_input: str, client: OpenAI) -> tuple:
         print(f"[REWRITE] intent={intent} query={query[:80]}")
         return query, intent
     except Exception:
-        return user_input, "lookup"
+        return user_input, "synthesis"
 
 # --- Rerank using Cross-Encoder ---
 def rerank_chunks(query: str, chunks: List[Document]) -> Tuple[List[Document], float]:
@@ -129,47 +129,6 @@ def revise_answer_with_gpt(question, draft_answer, client: OpenAI, model: str = 
         return revised
     except Exception:
         return draft_answer
-
-# --- Unified Response Generator ---
-def generate_response(
-    query: str,
-    docs: List[Document],
-    client: OpenAI,
-    user_profile: dict
-) -> Tuple[str, str]:
-    """
-    Returns: (final_answer, source_title)
-    """
-    ranked = rerank_chunks(query, docs[:3])
-
-    if ranked:
-        context = "\n\n".join([chunk.page_content[:500] for chunk in ranked])
-        system_prompt = (
-            f"You are {get_config()['brand']['company_name']}'s knowledge assistant. The user is a {user_profile['role']} "
-            f"with {user_profile['tenure']} at the company.\n\n"
-            "Your job is to clearly answer the user's question using the excerpts from internal documentation provided. "
-            "If you're unsure, advise the user to contact their administrator."
-        )
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"User question: {query}\n\nRelevant excerpts:\n{context}"}
-        ]
-    else:
-        fallback_context = "\n\n".join([chunk.page_content[:500] for chunk in docs[:3]])
-        messages = [
-            {"role": "system", "content": (
-                f"You are a helpful knowledge assistant trained on {get_config()['brand']['company_name']} internal documentation. The question wasn't answered clearly by any one excerpt, "
-                "but here are some partial chunks. Summarize a helpful answer based on what you can."
-            )},
-            {"role": "user", "content": f"User question: {query}\n\nContext snippets:\n{fallback_context}"}
-        ]
-
-    response = client.chat.completions.create(model="gpt-3.5-turbo", messages=messages)
-    draft_answer = response.choices[0].message.content.strip()
-    final_answer = revise_answer_with_gpt(query, draft_answer, client)
-
-    source_doc = docs[0].metadata.get("source", "Unknown") if docs else "None"
-    return final_answer, source_doc
 
 def generate_answer(messages, client, docs=None, model: str = "gpt-4o-mini") -> Tuple[str, str, Optional[int]]:
     """
@@ -326,7 +285,7 @@ def suggest_follow_ups(user_question, answer, client: OpenAI) -> list:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful knowledge assistant."},
                 {"role": "user", "content": prompt}

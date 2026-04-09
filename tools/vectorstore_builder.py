@@ -46,62 +46,6 @@ def get_openai_api_key():
         raise ValueError("❌ OPENAI_API_KEY is not set. Please check your .env file or Streamlit secrets.")
     return key
 
-# --- Build and Save Combined Vectorstore ---
-def build_vectorstore(
-    pdf_path="docs/InnovimEmployeeHandbook.pdf",
-    docx_path="docs/innovim_onboarding.docx",
-    index_path="faiss_index",
-    api_key=None
-):
-    print("🔍 Checking for existing FAISS index...")
-    index_file = Path(index_path) / "index.faiss"
-
-    embeddings = OpenAIEmbeddings(openai_api_key=get_openai_api_key())
-
-    if index_file.exists():
-        print(f"✅ Existing vectorstore found at '{index_path}/'. Loading...")
-        return FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
-
-    print("🚧 No index found. Building new vectorstore...")
-
-    # --- Load PDF ---
-    pdf_loader = PyPDFLoader(pdf_path)
-    pdf_docs = pdf_loader.load()
-    for doc in pdf_docs:
-        doc.metadata["source"] = "employee_handbook"
-
-    # --- Load DOCX ---
-    docx_loader = UnstructuredWordDocumentLoader(docx_path)
-    docx_docs = docx_loader.load()
-    for doc in docx_docs:
-        doc.metadata["source"] = "orientation_guide"
-
-    # --- Combine and Split ---
-    all_docs = pdf_docs + docx_docs
-    print(f"📄 Loaded {len(all_docs)} total documents")
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-        separators=["\n\n", "\n", ".", " ", ""]
-    )
-    docs = splitter.split_documents(all_docs)
-    print(f"✂️ Split into {len(docs)} chunks")
-
-    # --- Embed and Save ---
-    print("💾 Saving FAISS index...")
-    Path(index_path).mkdir(parents=True, exist_ok=True)
-    vectorstore = Chroma.from_documents(docs, embeddings, persist_directory=index_path)
-    vectorstore.persist()
-
-    print(f"✅ Vectorstore built and saved to '{index_path}/'")
-    return vectorstore
-
-# --- Optional CLI ---
-if __name__ == "__main__":
-    build_vectorstore(index_path="faiss_index_hr_combined")
-
-
 def rebuild_vectorstore_from_docs(docs_path="docs", faiss_path="faiss_index"):
     docs_path = Path(docs_path)
     all_docs = []

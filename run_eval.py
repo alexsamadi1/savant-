@@ -526,19 +526,19 @@ def run_eval():
   to calibrate the automated metric.
 """)
 
+    # Auto-archive to S3
+    try:
+        import boto3
+        s3 = boto3.client("s3",
+            aws_access_key_id=_patched_get_secret("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=_patched_get_secret("AWS_SECRET_ACCESS_KEY"),
+            region_name=_patched_get_secret("AWS_REGION")
+        )
+        s3_key = f"evals/{output_path.name}"
+        s3.upload_file(str(output_path), _patched_get_secret("S3_DOCS_BUCKET"), s3_key)
+        print(f"  Archived to S3: {s3_key}")
+    except Exception as e:
+        print(f"  S3 archive skipped: {e}")
+
 if __name__ == "__main__":
     run_eval()
-
-    # Auto-archive to S3
-try:
-    import boto3
-    s3 = boto3.client("s3",
-        aws_access_key_id=_patched_get_secret("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=_patched_get_secret("AWS_SECRET_ACCESS_KEY"),
-        region_name=_patched_get_secret("AWS_REGION")
-    )
-    s3_key = f"evals/{output_path.name}"
-    s3.upload_file(str(output_path), _patched_get_secret("S3_DOCS_BUCKET"), s3_key)
-    print(f"  Archived to S3: {s3_key}")
-except Exception as e:
-    print(f"  S3 archive skipped: {e}")

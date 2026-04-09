@@ -25,9 +25,11 @@ CONFLICT_TOPICS = [
 
 def run_gap_analysis(s3_client, docs_bucket, query_log_path="query_logs.csv"):
     """Analyze knowledge base gaps using document inventory and query logs."""
+    from tools.s3_utils import get_tenant_prefix
+    tenant_prefix = get_tenant_prefix()
 
     # --- 1. Document inventory from S3 ---
-    response = s3_client.list_objects_v2(Bucket=docs_bucket)
+    response = s3_client.list_objects_v2(Bucket=docs_bucket, Prefix=f"{tenant_prefix}/")
     documents = []
     if "Contents" in response:
         for obj in response["Contents"]:

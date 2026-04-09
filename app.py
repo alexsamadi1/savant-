@@ -377,8 +377,13 @@ if st.session_state.get("show_analytics", False):
 def get_vectorstore():
     try:
         return load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
-    except FileNotFoundError:
-        st.error("Knowledge base not found. Please contact your administrator.")
+    except FileNotFoundError as e:
+        msg = str(e)
+        if "being built" in msg or "refresh" in msg.lower():
+            st.warning("⏳ Knowledge base is being built for the first time. "
+                       "Please refresh in 2–3 minutes.")
+        else:
+            st.error("Knowledge base not found. Please contact your administrator.")
         st.stop()
     except Exception as e:
         st.error("Could not load the knowledge base. Please try refreshing the page.")
@@ -544,7 +549,7 @@ with st.spinner("Searching documents..."):
         try:
             start_time = time.time()
             rewritten, intent = rewrite_query(user_input, client)
-            k = 30 if intent == "synthesis" else 8
+            k = 30 if intent in ("synthesis", None) else 8
             docs = get_relevant_chunks(rewritten, vectorstore, k=k, bm25_index=bm25_index)
 
             if not docs:
@@ -582,7 +587,7 @@ with st.spinner("Searching documents..."):
                     i -= 1
             for user_msg, asst_msg in reversed(pairs):
                 conv_history.append({"role": "user", "content": user_msg["content"]})
-                conv_history.append({"role": "assistant", "content": asst_msg["content"][:500]})
+                conv_history.append({"role": "assistant", "content": asst_msg["content"][:1500]})
 
             messages = build_messages(rewritten, top_chunks, profile, fallback=False, conversation_history=conv_history)
 
@@ -596,7 +601,7 @@ with st.spinner("Searching documents..."):
             for token in stream_gen:
                 streamed_response += token
                 placeholder.markdown(
-                    f"<div class='chat-bubble bot-bubble'>{streamed_response}▌</div>",
+                    f"<div class='chat-bubble bot-bubble'>{html.escape(streamed_response)}▌</div>",
                     unsafe_allow_html=True
                 )
 
@@ -604,7 +609,7 @@ with st.spinner("Searching documents..."):
 
             # Final render without cursor
             placeholder.markdown(
-                f"<div class='chat-bubble bot-bubble'>{answer}</div>",
+                f"<div class='chat-bubble bot-bubble'>{html.escape(answer)}</div>",
                 unsafe_allow_html=True
             )
 
