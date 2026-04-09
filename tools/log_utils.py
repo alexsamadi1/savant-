@@ -1,4 +1,5 @@
 import csv
+import threading
 from datetime import datetime
 import os
 import streamlit as st
@@ -58,8 +59,8 @@ def log_query_to_csv(
     row = [
         datetime.now().isoformat(),
         session_id,
-        question.strip(),
-        response.strip(),
+        question.strip()[:500],
+        response.strip()[:500],
         fallback,
         response_type,
         gap_reason,
@@ -74,9 +75,15 @@ def log_query_to_csv(
             writer = csv.writer(f)
             writer.writerow(row)
 
-        with open(LOG_FILE, "rb") as f:
-            upload_file_to_s3(f, S3_KEY, S3_BUCKET)
-        print("[LOG] Uploaded updated log to S3.")
+        def _upload_log():
+            try:
+                with open(LOG_FILE, "rb") as f:
+                    upload_file_to_s3(f, S3_KEY, S3_BUCKET)
+                print("[LOG] Uploaded updated log to S3.")
+            except Exception as e:
+                print(f"[LOG] Background upload failed: {e}")
+
+        threading.Thread(target=_upload_log, daemon=True).start()
     except Exception as e:
         print(f"[LOG] Logging failed: {e}")
 

@@ -56,7 +56,7 @@ def rewrite_query(user_input: str, client: OpenAI) -> tuple:
 def rerank_chunks(query: str, chunks: List[Document]) -> Tuple[List[Document], float]:
     if not chunks:
         return [], 0.0
-    pairs = [[query, chunk.page_content[:512]] for chunk in chunks]
+    pairs = [[query, chunk.page_content[:1024]] for chunk in chunks]
     scores = get_cross_encoder().predict(pairs)
     ranked_indices = np.argsort(scores)[::-1]
     top_score = float(scores[ranked_indices[0]]) if len(ranked_indices) > 0 else 0.0

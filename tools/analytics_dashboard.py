@@ -101,6 +101,11 @@ def show_analytics_dashboard():
         st.error(f"Error loading log data: {e}")
         return
 
+    if len(df) == 0:
+        st.info("📭 No queries yet — share the access code with your team to get started.")
+        show_documents_panel()
+        st.stop()
+
     # Auto-run gap analysis for health score
     _ensure_gap_analysis()
 

@@ -1,4 +1,5 @@
 import os
+import re
 import pickle
 from pathlib import Path
 from dotenv import load_dotenv
@@ -32,7 +33,7 @@ def tokenize_for_bm25(text: str) -> list:
         lower = raw.lower()
         if lower in stop_words:
             continue
-        if 2 <= len(raw) <= 5 and raw.isupper():
+        if re.search(r'\d', raw) or (raw.isupper() and len(raw) <= 10):
             result.append(lower)
         else:
             result.append(_stemmer.stem(lower))
@@ -85,11 +86,17 @@ def rebuild_vectorstore_from_s3():
     print(f"[TENANT] Rebuilding index for tenant: {tenant_prefix}")
 
     try:
+        from botocore.config import Config as BotoConfig
         s3 = boto3.client(
             "s3",
             aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
-            region_name=get_secret("AWS_REGION")
+            region_name=get_secret("AWS_REGION"),
+            config=BotoConfig(
+                connect_timeout=10,
+                read_timeout=30,
+                retries={"max_attempts": 2}
+            )
         )
         docs_bucket = get_secret("S3_DOCS_BUCKET")
         index_bucket = get_secret("S3_INDEX_BUCKET")
@@ -229,7 +236,7 @@ def add_contextual_embeddings(chunks, api_key):
                 temperature=0
             )
             context_sentence = response.choices[0].message.content.strip()
-            chunk.page_content = f"{context_sentence}\n\n{chunk.page_content}"
+            chunk.metadata["context_summary"] = context_sentence
         except Exception:
             pass  # leave chunk unchanged on failure
         return chunk
@@ -287,11 +294,17 @@ def rebuild_vectorstore_enriched():
     print(f"[TENANT] Rebuilding index for tenant: {tenant_prefix}")
 
     try:
+        from botocore.config import Config as BotoConfig
         s3 = boto3.client(
             "s3",
             aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
-            region_name=get_secret("AWS_REGION")
+            region_name=get_secret("AWS_REGION"),
+            config=BotoConfig(
+                connect_timeout=10,
+                read_timeout=30,
+                retries={"max_attempts": 2}
+            )
         )
         docs_bucket = get_secret("S3_DOCS_BUCKET")
         index_bucket = get_secret("S3_INDEX_BUCKET")

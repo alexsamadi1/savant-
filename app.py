@@ -7,11 +7,13 @@ try:
         environment="production",
     )
     print("[SENTRY] Initialized successfully")
+    from tools.s3_utils import get_tenant_prefix as _get_tenant_init
+    sentry_sdk.set_tag("tenant", _get_tenant_init())
 except Exception as e:
     print(f"[SENTRY] Not initialized: {e}")
 
 import streamlit as st
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from tools.embeddings import load_faiss_vectorstore
 from tools.s3_utils import get_secret
 from tools.s3_utils import upload_file_to_s3
@@ -43,7 +45,8 @@ assistant = cfg["assistant"]
 st.set_page_config(
     page_title=brand["app_name"],
     page_icon=brand["page_icon"],
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 ensure_log_file_exists()
 
@@ -267,15 +270,34 @@ if not st.session_state.get("authenticated", False):
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image(brand["logo_path"], use_container_width=True)
+        if "auth_attempts" not in st.session_state:
+            st.session_state.auth_attempts = 0
         with st.form("access_gate_form"):
+            st.caption("Contact your administrator for access.")
             access_code = st.text_input("Enter access code", type="password", key="access_code_input")
             submitted = st.form_submit_button("Continue", type="primary", use_container_width=True)
             if submitted:
                 if access_code == get_secret("ACCESS_CODE"):
                     st.session_state.authenticated = True
+                    st.session_state.auth_attempts = 0
                     st.rerun()
                 else:
-                    st.error("Invalid access code")
+                    st.session_state.auth_attempts += 1
+                    if st.session_state.auth_attempts >= 5:
+                        st.markdown(
+                            "<div style='color:#ff6b6b; font-size:0.9rem; "
+                            "text-align:center; margin-top:0.5rem;'>"
+                            "🚫 Too many failed attempts. Please contact your administrator.</div>",
+                            unsafe_allow_html=True
+                        )
+                        st.stop()
+                    else:
+                        st.markdown(
+                            "<div style='color:#ff6b6b; font-size:0.9rem; "
+                            "text-align:center; margin-top:0.5rem;'>"
+                            "❌ Incorrect access code. Please try again.</div>",
+                            unsafe_allow_html=True
+                        )
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
@@ -353,15 +375,25 @@ if "role" not in profile or "tenure" not in profile:
         onboarding["role_options"],
         key="role_radio"
     )
-    st.session_state.tenure_selection = st.radio(
-        onboarding["tenure_question"],
-        onboarding["tenure_options"],
-        key="tenure_radio"
-    )
+    has_tenure = "tenure_options" in onboarding and onboarding["tenure_options"]
+    if has_tenure:
+        st.session_state.tenure_selection = st.radio(
+            onboarding["tenure_question"],
+            onboarding["tenure_options"],
+            key="tenure_radio"
+        )
 
+    st.markdown("""
+    <style>
+    [data-testid="baseButton-primary"] {
+        position: sticky;
+        bottom: 1rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     if st.button("✅ Continue", type="primary", use_container_width=True):
         profile["role"] = st.session_state.role_selection
-        profile["tenure"] = st.session_state.tenure_selection
+        profile["tenure"] = st.session_state.tenure_selection if has_tenure else "N/A"
         save_profile_to_ls(profile)
         st.success("You're all set! You can now start asking questions below 👇")
         st.rerun()
@@ -376,7 +408,32 @@ if st.session_state.get("show_analytics", False):
 @st.cache_resource(show_spinner="🔍 Loading knowledge base...")
 def get_vectorstore():
     try:
-        return load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
+        result = load_faiss_vectorstore("index", get_secret("OPENAI_API_KEY"))
+        # Cache doc count and last upload date from S3
+        if "kb_doc_count" not in st.session_state:
+            try:
+                import boto3
+                from tools.s3_utils import get_tenant_prefix
+                s3 = boto3.client(
+                    "s3",
+                    aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
+                    aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
+                    region_name=get_secret("AWS_REGION"),
+                )
+                tenant_prefix = get_tenant_prefix()
+                resp = s3.list_objects_v2(Bucket=get_secret("S3_DOCS_BUCKET"), Prefix=f"{tenant_prefix}/")
+                objects = [o for o in resp.get("Contents", []) if o["Key"].endswith((".pdf", ".docx"))]
+                st.session_state["kb_doc_count"] = len(objects)
+                if objects:
+                    latest = max(o["LastModified"] for o in objects)
+                    st.session_state["kb_last_updated"] = latest.strftime("%b %d, %Y")
+                else:
+                    st.session_state["kb_last_updated"] = "N/A"
+            except Exception as e:
+                print(f"[KB META] Could not fetch doc count: {e}")
+                st.session_state["kb_doc_count"] = None
+                st.session_state["kb_last_updated"] = None
+        return result
     except FileNotFoundError as e:
         msg = str(e)
         if "being built" in msg or "refresh" in msg.lower():
@@ -391,6 +448,7 @@ def get_vectorstore():
         st.stop()
 
 vectorstore, bm25_index = get_vectorstore()
+st.session_state["app_healthy"] = True
 
 # --- OpenAI Client ---
 client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
@@ -404,25 +462,28 @@ if "role" in profile and "tenure" in profile:
         role = profile.get("role", "Unknown Role")
         tenure = profile.get("tenure", "Unknown Tenure")
         st.markdown(f"**👤 Role:** {role}")
-        st.markdown(f"**📆 Tenure:** {tenure}")
+        if tenure != "N/A":
+            st.markdown(f"**📆 Tenure:** {tenure}")
         st.caption(f"_{brand['sidebar_caption']}_")
 
-        models_cfg = get_config()["models"]
-        if "selected_model" not in st.session_state:
-            st.session_state["selected_model"] = models_cfg["default"]
-        model_options = models_cfg["options"]
-        model_labels = [opt["label"] for opt in model_options]
-        model_values = [opt["value"] for opt in model_options]
-        current_index = model_values.index(st.session_state["selected_model"]) if st.session_state["selected_model"] in model_values else 0
-        selected_label = st.selectbox("🤖 Model", model_labels, index=current_index)
-        st.session_state["selected_model"] = model_values[model_labels.index(selected_label)]
-        st.caption("Swap models anytime — won't reset your chat")
-
-        st.markdown("---")
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.chat_history = []
             streamlit_js_eval(js_expressions="localStorage.removeItem('savant_chat_history'), null", key="clear_chat_ls")
             st.rerun()
+
+        models_cfg = get_config()["models"]
+        if "selected_model" not in st.session_state:
+            st.session_state["selected_model"] = models_cfg["default"]
+        if st.session_state.get("is_admin", False):
+            model_options = models_cfg["options"]
+            model_labels = [opt["label"] for opt in model_options]
+            model_values = [opt["value"] for opt in model_options]
+            current_index = model_values.index(st.session_state["selected_model"]) if st.session_state["selected_model"] in model_values else 0
+            selected_label = st.selectbox("🤖 Model", model_labels, index=current_index)
+            st.session_state["selected_model"] = model_values[model_labels.index(selected_label)]
+            st.caption("Swap models anytime — won't reset your chat")
+
+        st.markdown("---")
         if st.button("🔄 Reset Profile", use_container_width=True):
             st.session_state.user_profile = {}
             st.session_state.chat_history = []
@@ -444,6 +505,16 @@ if "role" in profile and "tenure" in profile:
                 st.success("Admin access granted")
 
             if st.session_state.get("is_admin", False):
+                gap_result = st.session_state.get("gap_analysis_result")
+                if gap_result:
+                    score = gap_result.get("health_score", 0)
+                    color = "#00C9A7" if score >= 70 else "#f0ad4e" if score >= 40 else "#d9534f"
+                    st.markdown(
+                        f"<div style='text-align:center;margin-bottom:8px;'>"
+                        f"<span style='font-size:1.4rem;font-weight:700;color:{color};'>"
+                        f"KB Health: {score}/100</span></div>",
+                        unsafe_allow_html=True
+                    )
                 uploaded_file = st.file_uploader("Upload doc (.pdf/.docx)", type=["pdf", "docx"])
                 if uploaded_file:
                     if uploaded_file.name != st.session_state.get("last_uploaded_file"):
@@ -480,6 +551,11 @@ if "role" in profile and "tenure" in profile:
                 if st.button("📊 Open Dashboard"):
                     st.session_state.show_analytics = True
 
+        if st.session_state.get("is_admin") and st.session_state.get("app_healthy"):
+            st.caption("✅ Knowledge base loaded")
+        elif st.session_state.get("is_admin"):
+            st.caption("⚠️ Knowledge base not loaded")
+
         st.markdown(
             f"<div style='font-size: 0.75rem; color: gray; margin-top: 1rem;'>{brand['footer_text']}</div>",
             unsafe_allow_html=True
@@ -487,7 +563,7 @@ if "role" in profile and "tenure" in profile:
 
 # --- Main Header ---
 st.markdown(f"<h1 style='text-align: center;'>{brand['app_name']} Assistant</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #888; font-size: 1rem;'>Your go-to assistant for institutional knowledge, policies, and procedures.</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; color: #888; font-size: 1rem;'>{assistant.get('subtitle', '')}</p>", unsafe_allow_html=True)
 
 # --- Sample Questions ---
 examples = assistant["sample_questions"]
@@ -508,12 +584,21 @@ if not st.session_state.chat_history and "example_question" not in st.session_st
             Just type your question below or click one of the samples to get started.
         </div>
         """, unsafe_allow_html=True)
+        doc_count = st.session_state.get("kb_doc_count")
+        last_updated = st.session_state.get("kb_last_updated")
+        if doc_count is not None:
+            st.markdown(
+                f"<div style='font-size:0.8rem;color:#888;margin-top:4px;padding-left:8px;'>"
+                f"📚 {doc_count} document{'s' if doc_count != 1 else ''} loaded · Last upload: {last_updated}"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
 # --- Chat History Display ---
 for entry in st.session_state.chat_history:
     with st.chat_message(entry["role"]):
         bubble = "user-bubble" if entry["role"] == "user" else "bot-bubble"
-        content = html.escape(entry['content']) if entry["role"] == "user" else entry['content']
+        content = html.escape(entry['content'])
         st.markdown(f"<div class='chat-bubble {bubble}'>{content}</div>", unsafe_allow_html=True)
 
 # --- Handle User Input ---
@@ -538,15 +623,14 @@ st.chat_message("user").markdown(f"<div class='chat-bubble user-bubble'>{html.es
 st.session_state.chat_history.append({"role": "user", "content": user_input})
 
 # --- Generate Response ---
-with st.spinner("Searching documents..."):
-    with st.chat_message("assistant"):
-        placeholder = st.empty()
-        placeholder.markdown(
-            "<div class='chat-bubble bot-bubble'>🤖 Typing<span class='dots'></span></div>",
-            unsafe_allow_html=True
-        )
-
-        try:
+with st.chat_message("assistant"):
+    placeholder = st.empty()
+    try:
+        with st.spinner("Searching documents..."):
+            placeholder.markdown(
+                "<div class='chat-bubble bot-bubble'>🔍 Searching your reports<span class='dots'></span></div>",
+                unsafe_allow_html=True
+            )
             start_time = time.time()
             rewritten, intent = rewrite_query(user_input, client)
             k = 30 if intent in ("synthesis", None) else 8
@@ -564,6 +648,10 @@ with st.spinner("Searching documents..."):
                 log_chat_interaction(user_input, answer, profile, [], fallback=True, response_type="fallback", gap_reason="no_docs_retrieved")
                 st.stop()
 
+            placeholder.markdown(
+                "<div class='chat-bubble bot-bubble'>📄 Reading relevant sections<span class='dots'></span></div>",
+                unsafe_allow_html=True
+            )
             ranked, rerank_confidence = rerank_chunks(rewritten, docs[:10])
             print(f"[RERANK] confidence={rerank_confidence:.3f} — {user_input[:80]}")
             top_chunks = [
@@ -585,9 +673,14 @@ with st.spinner("Searching documents..."):
                     i -= 2
                 else:
                     i -= 1
+            def clean_for_history(text):
+                text = re.sub(r'<[^>]+>', '', text)
+                text = text.split("\n\n---\n*Note:")[0]
+                return text.strip()
+
             for user_msg, asst_msg in reversed(pairs):
                 conv_history.append({"role": "user", "content": user_msg["content"]})
-                conv_history.append({"role": "assistant", "content": asst_msg["content"][:1500]})
+                conv_history.append({"role": "assistant", "content": clean_for_history(asst_msg["content"])[:1500]})
 
             messages = build_messages(rewritten, top_chunks, profile, fallback=False, conversation_history=conv_history)
 
@@ -625,6 +718,9 @@ with st.spinner("Searching documents..."):
                 if src == "Unknown Document" or src in seen_sources:
                     continue
                 seen_sources.add(src)
+                # Strip tenant prefix if present (e.g. "demo/filename" → "filename")
+                if "/" in src:
+                    src = src.split("/", 1)[-1]
                 clean_src = src.replace("_", " ").strip().title()
                 if section and section != "Introduction":
                     label = f"📄 {clean_src} — {section}"
@@ -633,17 +729,30 @@ with st.spinner("Searching documents..."):
                 else:
                     label = f"📄 {clean_src}"
                 st.markdown(f"<div class='citation-chip'>{label}</div>", unsafe_allow_html=True)
+                with st.expander("View source", expanded=False):
+                    clean_chunk = re.sub(r'Keywords:.*?\n', '', doc.page_content, flags=re.IGNORECASE).strip()
+                    if len(clean_chunk) > 400:
+                        excerpt = html.escape(clean_chunk[:400].rsplit(' ', 1)[0] + "...")
+                    else:
+                        excerpt = html.escape(clean_chunk)
+                    st.markdown(
+                        f"<blockquote style='border-left:3px solid #00C9A7; padding:8px 12px; "
+                        f"color:#ccc; font-size:0.85rem; background:#1a1a2e; border-radius:4px;'>"
+                        f"{excerpt}</blockquote>",
+                        unsafe_allow_html=True
+                    )
                 if len(seen_sources) >= 3:
                     break
             # --- Feedback ---
-            feedback_key = f"feedback_{len(st.session_state.chat_history)}"
-            col1, col2, col3 = st.columns([1, 1, 10])
-            with col1:
-                if st.button("👍", key=f"{feedback_key}_up", help="Helpful answer"):
-                    print(f"[FEEDBACK] 👍 — {user_input[:80]}")
-            with col2:
-                if st.button("👎", key=f"{feedback_key}_down", help="Needs improvement"):
-                    print(f"[FEEDBACK] 👎 — {user_input[:80]}")
+            if gap_reason != "error":
+                feedback_key = f"feedback_{len(st.session_state.chat_history)}"
+                col1, col2, col3 = st.columns([1, 1, 10])
+                with col1:
+                    if st.button("👍", key=f"{feedback_key}_up", help="Helpful answer"):
+                        print(f"[FEEDBACK] 👍 — {user_input[:80]}")
+                with col2:
+                    if st.button("👎", key=f"{feedback_key}_down", help="Needs improvement"):
+                        print(f"[FEEDBACK] 👎 — {user_input[:80]}")
 
             # --- Scroll to bottom ---
             st.markdown("<div id='bottom'></div>", unsafe_allow_html=True)
@@ -663,12 +772,17 @@ with st.spinner("Searching documents..."):
                 "not mentioned", "provided excerpts", "excerpts provided"
             ]
             if not any(phrase in answer.lower() for phrase in fallback_phrases):
-                is_grounded = check_grounding(answer, top_chunks, client)
-                if not is_grounded:
+                if rerank_confidence > 5.0 and len(answer) < 500:
+                    pass  # High confidence short answer — skip grounding check
+                elif not check_grounding(answer, top_chunks, client):
                     gap_reason = "grounding_failed"
                     answer += GROUNDING_WARNING
                     placeholder.markdown(
-                        f"<div class='chat-bubble bot-bubble'>{answer}</div>",
+                        f"<div class='chat-bubble bot-bubble' style='border-left:3px solid #f0ad4e;'>"
+                        f"<div style='color:#f0ad4e;font-weight:600;margin-bottom:6px;'>"
+                        f"⚠️ Unverified — this answer could not be fully confirmed against "
+                        f"your documents. Please verify before acting.</div>"
+                        f"{html.escape(answer)}</div>",
                         unsafe_allow_html=True
                     )
                     st.session_state.chat_history[-1]["content"] = answer
@@ -677,13 +791,27 @@ with st.spinner("Searching documents..."):
             source_titles = [doc.metadata.get("source", "unknown") for doc in docs]
             log_chat_interaction(user_input, answer, profile, source_titles, fallback=(gap_reason != "direct"), response_type="direct", gap_reason=gap_reason)
 
-        except Exception as e:
-            sentry_sdk.capture_exception(e)
-            print(f"[ERROR] Pipeline failure: {type(e).__name__}: {e}")
-            error_msg = "⚠️ Something went wrong while generating your answer. Please try again."
-            placeholder.markdown(
-                f"<div class='chat-bubble bot-bubble'>{error_msg}</div>",
-                unsafe_allow_html=True
-            )
-            st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
-            log_chat_interaction(user_input, error_msg, profile, [], fallback=True, response_type="error", gap_reason="error")
+    except RateLimitError:
+        error_msg = "⚠️ The AI service is under high load right now. Please try again in a few seconds."
+        placeholder.markdown(
+            f"<div class='chat-bubble bot-bubble'>{error_msg}</div>",
+            unsafe_allow_html=True
+        )
+        st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+        log_chat_interaction(user_input, error_msg, profile, [], fallback=True, response_type="error", gap_reason="rate_limit")
+    except Exception as e:
+        sentry_sdk.set_context("query", {
+            "user_input": user_input[:200],
+            "intent": intent if 'intent' in locals() else "unknown"
+        })
+        import traceback
+        print("[ERROR] Full traceback:")
+        print(traceback.format_exc())
+        sentry_sdk.capture_exception(e)
+        error_msg = "⚠️ Something went wrong while generating your answer. Please try again."
+        placeholder.markdown(
+            f"<div class='chat-bubble bot-bubble'>{error_msg}</div>",
+            unsafe_allow_html=True
+        )
+        st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+        log_chat_interaction(user_input, error_msg, profile, [], fallback=True, response_type="error", gap_reason="error")
