@@ -699,6 +699,7 @@ with st.chat_message("assistant"):
                 )
 
             answer = streamed_response
+            gap_reason = "direct"
 
             # Final render without cursor
             placeholder.markdown(
@@ -765,7 +766,6 @@ with st.chat_message("assistant"):
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
 
             # --- Grounding check (runs after answer is visible) ---
-            gap_reason = "direct"
             fallback_phrases = [
                 "do not include", "do not contain", "does not include", "does not contain",
                 "couldn't find", "cannot find", "no specific", "not specifically",
