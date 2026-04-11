@@ -11,17 +11,18 @@ interface StreamState {
   intent: string | null;
   status: "idle" | "searching" | "streaming" | "done" | "error";
   latency: number | null;
+  followUps: string[];
 }
 
 export function useStream() {
   const [state, setState] = useState<StreamState>({
     tokens: "", citations: [], grounded: null, confidence: null,
-    intent: null, status: "idle", latency: null,
+    intent: null, status: "idle", latency: null, followUps: [],
   });
 
   const ask = useCallback(async (question: string, profile: UserProfile, model = "gpt-4o-mini") => {
     const start = Date.now();
-    setState({ tokens: "", citations: [], grounded: null, confidence: null, intent: null, status: "searching", latency: null });
+    setState({ tokens: "", citations: [], grounded: null, confidence: null, intent: null, status: "searching", latency: null, followUps: [] });
     try {
       const response = await fetch(getStreamUrl(), {
         method: "POST",
@@ -47,7 +48,7 @@ export function useStream() {
               setState(s => ({ ...s, tokens: s.tokens + event.token! }));
             }
             if (event.done) {
-              setState(s => ({ ...s, status: "done", citations: event.citations || [], grounded: event.grounded ?? true, confidence: event.rerank_confidence ?? null, intent: event.intent || null, latency: (Date.now() - start) / 1000 }));
+              setState(s => ({ ...s, status: "done", citations: event.citations || [], grounded: event.grounded ?? true, confidence: event.rerank_confidence ?? null, intent: event.intent || null, latency: (Date.now() - start) / 1000, followUps: event.follow_ups || [] }));
             }
           } catch {}
         }
@@ -58,7 +59,7 @@ export function useStream() {
   }, []);
 
   const reset = useCallback(() => {
-    setState({ tokens: "", citations: [], grounded: null, confidence: null, intent: null, status: "idle", latency: null });
+    setState({ tokens: "", citations: [], grounded: null, confidence: null, intent: null, status: "idle", latency: null, followUps: [] });
   }, []);
 
   return { ...state, ask, reset };

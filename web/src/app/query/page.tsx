@@ -17,6 +17,7 @@ interface HistoryItem {
   intent: string | null;
   confidence: number | null;
   latency: number | null;
+  followUps: string[];
 }
 
 export default function QueryPage() {
@@ -27,10 +28,14 @@ export default function QueryPage() {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activityStage, setActivityStage] = useState(0);
+  const [docCount, setDocCount] = useState<number | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [collapsedItems, setCollapsedItems] = useState<Set<number>>(new Set());
+  const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
   const activityRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const { tokens, citations, grounded, intent, confidence, status, latency, ask, reset } = useStream();
+  const { tokens, citations, grounded, intent, confidence, status, latency, followUps, ask, reset } = useStream();
 
   const STAGES = [
     "Rewriting query...",
@@ -49,6 +54,16 @@ export default function QueryPage() {
   }, []);
 
   useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/health?tenant=${process.env.NEXT_PUBLIC_TENANT || 'demo'}`)
+      .then(r => r.json())
+      .then(data => {
+        setDocCount(data.doc_count ?? null);
+        setLastUpdated(data.last_updated ?? null);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (status === "searching") {
       setActivityStage(0);
       let s = 0;
@@ -64,6 +79,11 @@ export default function QueryPage() {
 
   useEffect(() => {
     if (status === "done" && tokens) {
+      setCollapsedItems(prev => {
+        const next = new Set(prev);
+        if (history.length > 0) next.add(history.length - 1);
+        return next;
+      });
       setHistory(h => [...h, {
         q: history.length > 0 ? history[history.length - 1].q : question,
         answer: tokens,
@@ -72,7 +92,9 @@ export default function QueryPage() {
         intent: intent,
         confidence: confidence,
         latency: latency,
+        followUps: followUps || [],
       }]);
+      setCurrentFollowUps(followUps || []);
       reset();
     }
   }, [status]);
@@ -87,6 +109,18 @@ export default function QueryPage() {
         e.preventDefault();
         inputRef.current?.focus();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setHistory([]);
+        setCollapsedItems(new Set());
+        setCurrentFollowUps([]);
+        reset();
+        setQuestion("");
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+      if (e.key === "Escape") {
+        inputRef.current?.blur();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -94,6 +128,7 @@ export default function QueryPage() {
 
   const handleAsk = useCallback((q: string) => {
     if (!q.trim() || !profile || status === "searching" || status === "streaming") return;
+    setCurrentFollowUps([]);
     ask(q, profile);
     setQuestion("");
   }, [profile, status, ask]);
@@ -113,22 +148,77 @@ export default function QueryPage() {
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 1.5rem", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <Topbar profile={profile} />
 
-      {!hasContent && <Hero />}
+      {!hasContent && <Hero docCount={docCount} lastUpdated={lastUpdated} />}
 
       <div style={{ flex: 1, paddingBottom: "1rem" }}>
-        {history.map((item, i) => (
-          <div key={i} style={{ marginBottom: "1.75rem" }}>
-            <QuestionBubble text={item.q} />
-            <AnswerCard
-              answer={item.answer}
-              citations={item.citations}
-              grounded={item.grounded}
-              intent={item.intent}
-              confidence={item.confidence}
-              latency={item.latency}
-            />
-          </div>
-        ))}
+        {history.map((item, i) => {
+          const isLast = i === history.length - 1;
+          const isCollapsed = collapsedItems.has(i);
+          return (
+            <div key={i} style={{ marginBottom: isLast ? "1.75rem" : "0.5rem" }}>
+              <div
+                onClick={() => {
+                  setCollapsedItems(prev => {
+                    const next = new Set(prev);
+                    if (next.has(i)) next.delete(i);
+                    else next.add(i);
+                    return next;
+                  });
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.625rem",
+                  cursor: "pointer",
+                  padding: "0.3rem 0",
+                  marginBottom: isCollapsed ? 0 : "0.5rem",
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width={12}
+                  height={12}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  style={{
+                    color: "var(--text-muted)",
+                    flexShrink: 0,
+                    transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                    transition: "transform 0.15s",
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                <span style={{
+                  fontFamily: "var(--font-ui)",
+                  fontSize: "0.85rem",
+                  color: isCollapsed ? "var(--text-muted)" : "var(--text-secondary)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: "600px",
+                }}>
+                  {item.q}
+                </span>
+              </div>
+              {!isCollapsed && (
+                <>
+                  <QuestionBubble text={item.q} />
+                  <AnswerCard
+                    answer={item.answer}
+                    citations={item.citations}
+                    grounded={item.grounded}
+                    intent={item.intent}
+                    confidence={item.confidence}
+                    latency={item.latency}
+                  />
+                  <FollowUps questions={item.followUps} onAsk={handleAsk} />
+                </>
+              )}
+            </div>
+          );
+        })}
 
         {status === "searching" && (
           <ActivityCard stage={activityStage} stages={STAGES} />
@@ -158,6 +248,10 @@ export default function QueryPage() {
               }} />
             </div>
           </div>
+        )}
+
+        {status === "idle" && currentFollowUps.length > 0 && history.length > 0 && (
+          <FollowUps questions={currentFollowUps} onAsk={handleAsk} />
         )}
 
         <div ref={bottomRef} />
@@ -271,7 +365,7 @@ export default function QueryPage() {
             ))}
           </div>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--text-muted)" }}>
-            / to focus · Enter to send
+            / to focus · Enter to send · ⌘K to clear
           </span>
         </div>
       </div>
@@ -280,7 +374,46 @@ export default function QueryPage() {
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes settleIn { 0%{opacity:0.7} 50%{opacity:0.92} 100%{opacity:1} }
       `}</style>
+    </div>
+  );
+}
+
+function FollowUps({ questions, onAsk }: { questions: string[]; onAsk: (q: string) => void }) {
+  if (!questions || questions.length === 0) return null;
+  return (
+    <div style={{ marginTop: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+      {questions.map((q, i) => (
+        <button
+          key={i}
+          onClick={() => onAsk(q)}
+          style={{
+            fontSize: "0.8rem",
+            color: "var(--text-secondary)",
+            background: "transparent",
+            border: "0.5px solid rgba(255,255,255,0.1)",
+            borderRadius: 20,
+            padding: "5px 14px",
+            cursor: "pointer",
+            fontFamily: "var(--font-ui)",
+            transition: "all 0.15s",
+            textAlign: "left",
+          }}
+          onMouseOver={e => {
+            (e.currentTarget as HTMLElement).style.color = "var(--teal)";
+            (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,201,167,0.3)";
+            (e.currentTarget as HTMLElement).style.background = "rgba(0,201,167,0.05)";
+          }}
+          onMouseOut={e => {
+            (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+            (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)";
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+          }}
+        >
+          ↳ {q}
+        </button>
+      ))}
     </div>
   );
 }
@@ -330,7 +463,7 @@ function Topbar({ profile }: { profile: UserProfile | null }) {
   );
 }
 
-function Hero() {
+function Hero({ docCount, lastUpdated }: { docCount: number | null; lastUpdated: string | null }) {
   return (
     <div style={{
       textAlign: "center",
@@ -366,6 +499,29 @@ function Hero() {
       }}>
         Cited, grounded, and auditable — built for GovCon
       </p>
+      {docCount !== null && (
+        <div style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          marginTop: "1.25rem",
+          padding: "0.4rem 1rem",
+          background: "rgba(255,255,255,0.03)",
+          border: "0.5px solid rgba(255,255,255,0.08)",
+          borderRadius: 20,
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.68rem",
+          color: "var(--text-muted)",
+        }}>
+          <span style={{ color: "var(--teal)", opacity: 0.8 }}>{docCount} document{docCount !== 1 ? "s" : ""}</span>
+          {lastUpdated && (
+            <>
+              <span style={{ opacity: 0.3 }}>·</span>
+              <span>updated {lastUpdated}</span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -445,94 +601,188 @@ function AnswerCard({ answer, citations, grounded, intent, confidence, latency }
   confidence: number | null;
   latency: number | null;
 }) {
+  const [copied, setCopied] = useState(false);
   const confLevel = confidence === null ? 0 : confidence > 5 ? 3 : confidence > 2 ? 2 : 1;
   const isVerified = grounded === true;
   const confColor = isVerified ? "var(--teal)" : "#f0ad4e";
+  const borderColor = grounded === false ? "#f0ad4e" : "var(--teal)";
 
   return (
-    <div style={{
-      background: "var(--surface)",
-      border: "0.5px solid rgba(255,255,255,0.06)",
-      borderLeft: "2.5px solid var(--teal)",
-      borderRadius: "0 12px 12px 0",
-      animation: "fadeUp 0.3s ease",
-    }}>
+    <div style={{ position: "relative", animation: "settleIn 0.25s ease" }}>
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(answer.replace(/<[^>]+>/g, '').replace(/\*\*/g, ''));
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }}
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 10,
+          background: "transparent",
+          border: "0.5px solid rgba(255,255,255,0.1)",
+          borderRadius: 6,
+          padding: "4px 8px",
+          cursor: "pointer",
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.65rem",
+          color: copied ? "var(--teal)" : "var(--text-muted)",
+          transition: "all 0.15s",
+          zIndex: 10,
+        }}
+        className="copy-btn"
+      >
+        {copied ? "copied" : "copy"}
+      </button>
       <div style={{
-        padding: "1.125rem 1.375rem",
-        fontFamily: "var(--font-answer)",
-        fontSize: "1rem",
-        lineHeight: 1.8,
-        color: "var(--text-primary)",
+        background: "var(--surface)",
+        border: "0.5px solid rgba(255,255,255,0.06)",
+        borderLeft: `2.5px solid ${borderColor}`,
+        borderRadius: "0 12px 12px 0",
+        animation: "fadeUp 0.3s ease",
       }}>
-        <MarkdownBody text={answer} />
-      </div>
-
-      {citations && citations.length > 0 && (
         <div style={{
-          padding: "0.625rem 1.375rem",
-          borderTop: "0.5px solid rgba(255,255,255,0.05)",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "0.4rem",
+          padding: "1.125rem 1.375rem",
+          fontFamily: "var(--font-answer)",
+          fontSize: "1rem",
+          lineHeight: 1.8,
+          color: "var(--text-primary)",
         }}>
-          {citations.map((c, i) => (
-            <div key={i} style={{
+          {grounded === false && (
+            <div style={{
               display: "flex",
               alignItems: "center",
-              gap: 5,
-              background: "rgba(0,201,167,0.05)",
-              border: "0.5px solid rgba(0,201,167,0.18)",
-              borderRadius: 6,
-              padding: "3px 10px",
+              gap: "0.5rem",
+              background: "rgba(240,173,78,0.08)",
+              border: "0.5px solid rgba(240,173,78,0.25)",
+              borderRadius: 8,
+              padding: "0.5rem 0.875rem",
+              marginBottom: "0.875rem",
               fontFamily: "var(--font-mono)",
-              fontSize: "0.7rem",
-              color: "rgba(0,201,167,0.7)",
-              cursor: "pointer",
-              transition: "all 0.15s",
+              fontSize: "0.72rem",
+              color: "#f0ad4e",
             }}>
-              <svg viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5, flexShrink: 0 }}>
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/>
+              <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              <span>{c.source}</span>
-              {c.section && (
-                <span style={{ opacity: 0.45, fontSize: "0.65rem" }}>— {c.section}</span>
-              )}
+              Unverified — answer could not be fully confirmed against your documents. Validate before acting.
             </div>
-          ))}
+          )}
+          <MarkdownBody text={answer} />
         </div>
-      )}
 
+        {citations && citations.length > 0 && (
+          <div style={{
+            padding: "0.625rem 1.375rem",
+            borderTop: "0.5px solid rgba(255,255,255,0.05)",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.4rem",
+          }}>
+            {citations.map((c, i) => (
+              <CitationChip key={i} citation={c} />
+            ))}
+          </div>
+        )}
+
+        <div style={{
+          padding: "0.5rem 1.375rem",
+          borderTop: "0.5px solid rgba(255,255,255,0.04)",
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+          flexWrap: "wrap",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <SignalBars level={confLevel} color={confColor} />
+            <span style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.68rem",
+              color: confColor,
+            }}>
+              {isVerified ? "Verified" : "Partial match"}
+            </span>
+          </div>
+
+          {intent && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem", color: "var(--text-muted)" }}>
+              {intent === "synthesis" ? "◈ Deep analysis" : "◉ Quick lookup"}
+            </span>
+          )}
+
+          {citations && citations.length > 0 && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem", color: "var(--text-muted)" }}>
+              {citations.length === 1 ? "1 document" : `${citations.length} documents`}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CitationChip({ citation }: { citation: Citation }) {
+  const [showPreview, setShowPreview] = useState(false);
+  return (
+    <div
+      style={{ position: "relative", display: "inline-block" }}
+      onMouseEnter={() => setShowPreview(true)}
+      onMouseLeave={() => setShowPreview(false)}
+    >
       <div style={{
-        padding: "0.5rem 1.375rem",
-        borderTop: "0.5px solid rgba(255,255,255,0.04)",
         display: "flex",
         alignItems: "center",
-        gap: "1rem",
-        flexWrap: "wrap",
+        gap: 5,
+        background: "rgba(0,201,167,0.05)",
+        border: "0.5px solid rgba(0,201,167,0.18)",
+        borderRadius: 6,
+        padding: "3px 10px",
+        fontFamily: "var(--font-mono)",
+        fontSize: "0.7rem",
+        color: "rgba(0,201,167,0.7)",
+        cursor: "pointer",
+        transition: "all 0.15s",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <SignalBars level={confLevel} color={confColor} />
-          <span style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "0.68rem",
-            color: confColor,
-          }}>
-            {isVerified ? "Verified" : "Partial match"}
-          </span>
-        </div>
-
-        {intent && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem", color: "var(--text-muted)" }}>
-            {intent === "synthesis" ? "◈ Deep analysis" : "◉ Quick lookup"}
-          </span>
-        )}
-
-        {latency && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem", color: "var(--text-muted)" }}>
-            {latency.toFixed(1)}s
-          </span>
+        <svg viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5, flexShrink: 0 }}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14,2 14,8 20,8"/>
+        </svg>
+        <span>{citation.source}</span>
+        {citation.section && (
+          <span style={{ opacity: 0.45, fontSize: "0.65rem" }}>— {citation.section}</span>
         )}
       </div>
+      {showPreview && citation.excerpt && (
+        <div style={{
+          position: "absolute",
+          bottom: "calc(100% + 6px)",
+          left: 0,
+          zIndex: 50,
+          background: "var(--surface-raised)",
+          border: "0.5px solid rgba(0,201,167,0.2)",
+          borderRadius: 10,
+          padding: "0.75rem 1rem",
+          width: 280,
+          fontFamily: "var(--font-answer)",
+          fontSize: "0.8rem",
+          lineHeight: 1.6,
+          color: "var(--text-secondary)",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.65rem",
+            color: "var(--teal)",
+            opacity: 0.7,
+            marginBottom: "0.4rem",
+          }}>
+            {citation.source}
+          </div>
+          &ldquo;{citation.excerpt}...&rdquo;
+        </div>
+      )}
     </div>
   );
 }

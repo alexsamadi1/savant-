@@ -32,5 +32,5 @@ export async function runConflictDetection(adminCode: string): Promise<ConflictR
 }
 export function getStreamUrl() { return `${BASE}/query/stream`; }
 export function buildStreamBody(question: string, profile: UserProfile, model: string) {
-  return JSON.stringify({ question, profile, model, tenant: TENANT });
+  return JSON.stringify({ question, profile, model, tenant: TENANT, include_follow_ups: true });
 }

@@ -15,6 +15,7 @@ class Citation(BaseModel):
     source: str
     section: Optional[str] = None
     page: Optional[int] = None
+    excerpt: Optional[str] = None
 
 class QueryResponse(BaseModel):
     answer: str
@@ -23,6 +24,7 @@ class QueryResponse(BaseModel):
     intent: str
     rerank_confidence: float
     latency_s: float
+    follow_ups: Optional[List[str]] = None
 
 class UploadResponse(BaseModel):
     filename: str
@@ -34,6 +36,7 @@ class HealthResponse(BaseModel):
     vectorstore_loaded: bool
     tenant: str
     doc_count: int
+    last_updated: Optional[str] = None
 
 class RebuildResponse(BaseModel):
     doc_count: int

@@ -1,9 +1,9 @@
 export interface UserProfile { role: string; tenure: string; }
-export interface Citation { source: string; section?: string; page?: number; }
-export interface QueryResponse { answer: string; citations: Citation[]; grounded: boolean; intent: string; rerank_confidence: number; latency_s: number; }
-export interface StreamEvent { token: string | null; done: boolean; answer?: string; citations?: Citation[]; grounded?: boolean; intent?: string; rerank_confidence?: number; }
+export interface Citation { source: string; section?: string; page?: number; excerpt?: string; }
+export interface QueryResponse { answer: string; citations: Citation[]; grounded: boolean; intent: string; rerank_confidence: number; latency_s: number; follow_ups?: string[]; }
+export interface StreamEvent { token: string | null; done: boolean; answer?: string; citations?: Citation[]; grounded?: boolean; intent?: string; rerank_confidence?: number; follow_ups?: string[]; }
 export interface Document { name: string; type: string; size_kb: number; uploaded: string; }
-export interface HealthStatus { status: string; vectorstore_loaded: boolean; tenant: string; doc_count: number; }
+export interface HealthStatus { status: string; vectorstore_loaded: boolean; tenant: string; doc_count: number; last_updated?: string | null; }
 export interface GapAnalysis { health_score: number; health_explanation: string; coverage_gaps: CoverageGap[]; underperforming_docs: UnderperformingDoc[]; stale_docs: StaleDoc[]; missing_common_docs: MissingDoc[]; }
 export interface CoverageGap { topic: string; example_questions: string[]; suggested_document_title: string; }
 export interface UnderperformingDoc { filename: string; reason: string; }

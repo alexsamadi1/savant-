@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <Sidebar />
-        <main style={{
+        <main className="savant-main" style={{
           marginLeft: 220,
           minHeight: "100vh",
           display: "flex",

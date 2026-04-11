@@ -15,6 +15,7 @@ def health(tenant: str = "demo"):
         loaded = False
 
     doc_count = 0
+    last_updated = None
     try:
         s3 = boto3.client(
             "s3",
@@ -26,10 +27,14 @@ def health(tenant: str = "demo"):
             Bucket=get_secret("S3_DOCS_BUCKET"),
             Prefix=f"{tenant}/"
         )
-        doc_count = sum(
-            1 for o in resp.get("Contents", [])
-            if o["Key"].endswith((".pdf", ".docx"))
-        )
+        latest = None
+        for o in resp.get("Contents", []):
+            if o["Key"].endswith((".pdf", ".docx")):
+                doc_count += 1
+                if latest is None or o["LastModified"] > latest:
+                    latest = o["LastModified"]
+        if latest:
+            last_updated = latest.strftime("%b %-d, %Y")
     except Exception:
         pass
 
@@ -38,4 +43,5 @@ def health(tenant: str = "demo"):
         vectorstore_loaded=loaded,
         tenant=tenant,
         doc_count=doc_count,
+        last_updated=last_updated,
     )

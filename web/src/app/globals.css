@@ -1,6 +1,5 @@
-@import "tailwindcss";
-
 @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@300;400;500&display=swap');
+@import "tailwindcss";
 
 :root {
   --bg: #07070e;
@@ -40,3 +39,24 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+.copy-btn { opacity: 0 !important; transition: opacity 0.15s !important; }
+*:hover > .copy-btn, .copy-btn:focus { opacity: 1 !important; }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes settleIn { 0%{opacity:0.7} 50%{opacity:0.92} 100%{opacity:1} }
+
+.savant-sidebar { width: 220px; }
+.savant-main { margin-left: 220px; }
+
+@media (max-width: 900px) {
+  .savant-sidebar {
+    width: 52px !important;
+    padding: 1.25rem 0.5rem !important;
+  }
+  .savant-sidebar .nav-label { display: none !important; }
+  .savant-sidebar .brand-text { display: none !important; }
+  .savant-main { margin-left: 52px !important; }
+}

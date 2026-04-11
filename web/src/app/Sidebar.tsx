@@ -9,7 +9,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside style={{
+    <aside className="savant-sidebar" style={{
       width: 220,
       minHeight: "100vh",
       background: "#0a0f1a",
@@ -33,7 +33,7 @@ export default function Sidebar() {
         padding: "0.25rem 0.625rem",
         marginBottom: "1.25rem",
       }}>
-        Savant
+        <span className="brand-text">Savant</span>
       </div>
 
       {navItems.map(item => (
@@ -51,6 +51,7 @@ export default function Sidebar() {
             fontSize: "0.875rem",
             fontWeight: 400,
             transition: "all 0.15s",
+            justifyContent: "flex-start",
           }}
           onMouseOver={(e) => {
             (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(0,201,167,0.07)";
@@ -62,7 +63,7 @@ export default function Sidebar() {
           }}
         >
           <NavIcon name={item.icon} />
-          {item.label}
+          <span className="nav-label">{item.label}</span>
         </Link>
       ))}
 
@@ -75,7 +76,7 @@ export default function Sidebar() {
         padding: "0.25rem 0.625rem",
         letterSpacing: "0.05em",
       }}>
-        Savant v2.0
+        <span className="brand-text">Savant v2.0</span>
       </div>
     </aside>
   );
