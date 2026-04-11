@@ -1,25 +1,42 @@
 @import "tailwindcss";
 
-@theme inline {
-  --color-teal: #00C9A7;
-  --color-bg-primary: #0a0a0f;
-  --color-bg-card: #0d1f1e;
-  --color-bg-sidebar: #111118;
-  --shadow-teal: 0 0 18px rgba(0,201,167,0.35);
-  --shadow-teal-lg: 0 0 28px rgba(0,201,167,0.55);
-}
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
 :root {
+  --bg: #07070e;
+  --surface: #0d1117;
+  --surface-raised: #161b27;
+  --border: rgba(0, 201, 167, 0.1);
+  --border-bright: rgba(0, 201, 167, 0.35);
   --teal: #00C9A7;
-  --bg: #0a0a0f;
-  --card: #0d1f1e;
-  --sidebar: #111118;
-  --border: rgba(0,201,167,0.15);
-  --text: #e0e0e0;
-  --muted: #888888;
+  --teal-dim: rgba(0, 201, 167, 0.08);
+  --text-primary: #e8edf5;
+  --text-secondary: #7a8599;
+  --text-muted: #3d4a5c;
+  --font-ui: 'DM Sans', -apple-system, sans-serif;
+  --font-answer: 'Newsreader', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; }
+
 body {
-  background-color: #0a0a0f;
-  color: #e0e0e0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(0, 201, 167, 0.04) 0%, transparent 55%),
+    radial-gradient(circle, rgba(255,255,255,0.012) 1px, transparent 1px);
+  background-size: cover, 32px 32px;
 }
+
+::selection { background: rgba(0, 201, 167, 0.2); color: var(--text-primary); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
