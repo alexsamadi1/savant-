@@ -92,6 +92,17 @@ def load_faiss_vectorstore(index_name, openai_api_key, index_dir="faiss_index"):
             except Exception:
                 pass
 
+    # Store index timestamp in environment for log_utils to read
+    if manifest_file.exists():
+        import os
+        try:
+            with open(manifest_file) as f:
+                m = json.load(f)
+            os.environ["SAVANT_INDEX_CREATED_AT"] = m.get(
+                "created_at", "")
+        except Exception:
+            pass
+
     # Load FAISS from local files
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
     faiss_vectorstore = FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)

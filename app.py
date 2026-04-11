@@ -847,8 +847,9 @@ with st.chat_message("assistant"):
             latency = round(time.time() - start_time, 2)
             print(f"[LATENCY] {latency}s — {user_input[:80]}")
 
-            # --- Citation chips (up to 3 deduplicated sources) ---
+            # --- Citation chips — compact inline row ---
             seen_sources = set()
+            citation_data = []
             for doc in ranked[:5]:
                 src = doc.metadata.get("source", "Unknown Document")
                 section = doc.metadata.get("section_title", "")
@@ -856,31 +857,39 @@ with st.chat_message("assistant"):
                 if src == "Unknown Document" or src in seen_sources:
                     continue
                 seen_sources.add(src)
-                # Strip tenant prefix if present (e.g. "demo/filename" → "filename")
                 if "/" in src:
                     src = src.split("/", 1)[-1]
                 clean_src = src.replace("_", " ").strip().title()
                 if section and section != "Introduction":
-                    label = f"📄 {clean_src} — {section}"
+                    label = f"{clean_src} — {section}"
                 elif pg:
-                    label = f"📄 {clean_src} — Page {pg}"
+                    label = f"{clean_src} — p.{pg}"
                 else:
-                    label = f"📄 {clean_src}"
-                st.markdown(f"<div class='citation-chip'>{label}</div>", unsafe_allow_html=True)
-                with st.expander("View source", expanded=False):
-                    clean_chunk = re.sub(r'Keywords:.*?\n', '', doc.page_content, flags=re.IGNORECASE).strip()
-                    if len(clean_chunk) > 400:
-                        excerpt = html.escape(clean_chunk[:400].rsplit(' ', 1)[0] + "...")
-                    else:
-                        excerpt = html.escape(clean_chunk)
-                    st.markdown(
-                        f"<blockquote style='border-left:3px solid #00C9A7; padding:8px 12px; "
-                        f"color:#ccc; font-size:0.85rem; background:#1a1a2e; border-radius:4px;'>"
-                        f"{excerpt}</blockquote>",
-                        unsafe_allow_html=True
-                    )
+                    label = clean_src
+                clean_chunk = re.sub(
+                    r'Keywords:.*?\n', '', doc.page_content,
+                    flags=re.IGNORECASE
+                ).strip()
+                excerpt = clean_chunk[:300].rsplit(' ', 1)[0] + "..." \
+                    if len(clean_chunk) > 300 else clean_chunk
+                citation_data.append((label, excerpt))
                 if len(seen_sources) >= 3:
                     break
+
+            if citation_data:
+                st.markdown(
+                    "<div style='margin-top:8px;margin-bottom:4px;"
+                    "font-size:0.75rem;color:#666;'>Sources</div>",
+                    unsafe_allow_html=True
+                )
+                for label, excerpt in citation_data:
+                    with st.expander(f"📄 {label}", expanded=False):
+                        st.markdown(
+                            f"<div style='font-size:0.82rem;color:#ccc;"
+                            f"line-height:1.5;border-left:2px solid #00C9A7;"
+                            f"padding-left:10px;'>{html.escape(excerpt)}</div>",
+                            unsafe_allow_html=True
+                        )
 
             # --- Copy to clipboard ---
             copy_text = answer

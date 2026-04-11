@@ -28,3 +28,10 @@ subtitle = "Instant answers from Innovim's program reports — cited, grounded, 
 
 [storage]
 s3_docs_bucket = "innovim-hr-docs-1"
+
+[compliance]
+industry = "government_contracting"
+org_size = "medium"
+certifications_pursuing = ["CMMI-DEV-2"]
+compliance_frameworks = ["FAR", "DFARS", "DCAA"]
+pilot_start_date = "2026-04-09"

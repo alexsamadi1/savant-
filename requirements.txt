@@ -22,3 +22,8 @@ ragas
 datasets
 streamlit-js-eval
 pdfplumber
+fastapi
+uvicorn[standard]
+python-multipart
+httpx
+sse-starlette

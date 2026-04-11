@@ -43,3 +43,26 @@
 ## Weekly health check (run every Monday)
 make smoke TENANT_PREFIX=demo
 make smoke TENANT_PREFIX=innovim
+
+## FastAPI Design Notes (Task 73)
+
+When building the FastAPI layer, design with these
+benchmark endpoints in mind — even as stubs initially:
+
+  GET  /organizations/{tenant}/health-history
+       Returns: list of gap_analysis_{ts}.json results over time
+
+  GET  /organizations/{tenant}/gaps/resolved
+       Returns: gaps identified vs rebuild events (lifecycle)
+
+  POST /benchmark
+       Body: {tenant, industry, org_size, frameworks}
+       Returns: how this org compares to anonymized peers
+
+  GET  /organizations/{tenant}/compliance-readiness
+       Body: {framework: "DCAA"|"ISO-9001"|"CMMI-DEV-2"}
+       Returns: coverage % against framework requirements
+
+These endpoints don't need to be built now.
+Designing FastAPI routes with them in mind avoids
+a second rewrite when the benchmark layer is built.

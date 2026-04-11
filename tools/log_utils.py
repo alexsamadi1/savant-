@@ -32,7 +32,8 @@ def ensure_log_file_exists():
             writer = csv.writer(f)
             writer.writerow([
                 "timestamp", "session_id", "question", "response",
-                "fallback", "response_type", "gap_reason", "user_role", "user_tenure", "source_docs", "feedback"
+                "fallback", "response_type", "gap_reason", "user_role", "user_tenure", "source_docs",
+                "feedback", "index_version"
             ])
 
 def log_query_to_csv(
@@ -56,6 +57,8 @@ def log_query_to_csv(
 
     doc_string = ", ".join(source_docs) if source_docs else ""
 
+    index_version = os.environ.get("SAVANT_INDEX_CREATED_AT", "")
+
     row = [
         datetime.now().isoformat(),
         session_id,
@@ -67,7 +70,8 @@ def log_query_to_csv(
         user_role or "",
         user_tenure or "",
         ", ".join(source_docs) if source_docs else "",
-        feedback
+        feedback,
+        index_version
     ]
 
     try:

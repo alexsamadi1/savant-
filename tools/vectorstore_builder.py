@@ -260,6 +260,23 @@ def _save_and_upload_index(vectorstore, all_chunks, s3, index_bucket, tenant_pre
     except Exception as e:
         print(f"⚠️ Could not upload to S3: {e}")
 
+    # Log rebuild event for gap lifecycle tracking
+    try:
+        rebuild_event = {
+            "timestamp": datetime.now().isoformat(),
+            "tenant": tenant_prefix,
+            "doc_count": len(all_chunks),
+            "embedding_model": "text-embedding-ada-002"
+        }
+        s3.put_object(
+            Bucket=index_bucket,
+            Key=f"{tenant_prefix}/rebuild_events.jsonl",
+            Body=json.dumps(rebuild_event) + "\n"
+        )
+        print("[INDEX] Rebuild event logged")
+    except Exception as e:
+        print(f"[INDEX] Could not log rebuild event: {e}")
+
 def rebuild_vectorstore_enriched():
     """
     Full rebuild using enriched chunking — same method as the original

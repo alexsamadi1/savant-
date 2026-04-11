@@ -33,6 +33,13 @@ subtitle = "Your go-to assistant for institutional knowledge, policies, and proc
 [storage]
 s3_docs_bucket = "innovim-hr-docs-1"
 
+[compliance]
+industry = "government_contracting"
+org_size = "medium"
+certifications_pursuing = []
+compliance_frameworks = ["FAR", "DFARS", "DCAA"]
+pilot_start_date = ""
+
 [models]
 default = "gpt-4o-mini"
 options = [

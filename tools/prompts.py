@@ -11,7 +11,29 @@ def build_system_prompt(company: str, role: str, tenure: str, today: str, system
         "one cohesive answer. Be helpful and professional. "
         "If you're unsure, advise the user to contact their administrator."
     )
-    return f"{base}\n\n{system_prompt_layer}".strip() if system_prompt_layer else base
+    formatting_rules = (
+        "\n\nFormatting rules — always follow these:\n"
+        "- Lead with the direct answer on the first line, "
+        "in bold if it is a short phrase or key finding\n"
+        "- Use bullet points for any list of 3+ items, "
+        "programs, findings, or steps\n"
+        "- Bold key terms, names, dates, dollar amounts, "
+        "and percentages\n"
+        "- Keep paragraphs to 2-3 sentences maximum\n"
+        "- If comparing multiple items, use a structured "
+        "list not prose\n"
+        "- End with the source document name and date "
+        "if known\n"
+        "- Never start with 'Based on the documents', "
+        "'According to', or similar preamble — "
+        "lead with the answer"
+    )
+    full_prompt = f"{base}{formatting_rules}"
+    return (
+        f"{full_prompt}\n\n{system_prompt_layer}".strip()
+        if system_prompt_layer
+        else full_prompt
+    )
 
 def build_fallback_system_prompt(company: str, role: str, tenure: str, today: str) -> str:
     return (

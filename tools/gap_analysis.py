@@ -95,13 +95,24 @@ def run_gap_analysis(s3_client, docs_bucket, query_log_path="query_logs.csv"):
         "Given the document inventory and query analytics, produce a gap analysis report. "
         "Return JSON only, no markdown fences. Schema:\n"
         "{\n"
-        '  "coverage_gaps": [{"topic": string, "example_questions": string[], "suggested_document_title": string}],\n'
+        '  "coverage_gaps": [{"topic": string, "example_questions": string[], '
+        '"suggested_document_title": string, "regulatory_reference": string, '
+        '"severity": "critical"|"moderate"|"low"}],\n'
         '  "underperforming_docs": [{"filename": string, "reason": string}],\n'
         '  "stale_docs": [{"filename": string, "days_since_upload": int, "recommendation": string}],\n'
         '  "missing_common_docs": [{"title": string, "why_needed": string}],\n'
         '  "health_score": int,\n'
         '  "health_explanation": string\n'
-        "}"
+        "}\n\n"
+        "For GovCon organizations, map each coverage gap to its "
+        "specific regulatory reference where applicable "
+        "(e.g. FAR 31.205-46 for travel costs, "
+        "DFARS 252.204-7012 for CUI handling, "
+        "DCAA ICE Model for timekeeping requirements). "
+        "If no specific regulation applies, use empty string. "
+        "Set severity to critical for gaps that would cause "
+        "audit findings, moderate for best-practice gaps, "
+        "low for nice-to-have documentation."
     )
 
     user_prompt = (
