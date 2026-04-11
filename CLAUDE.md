@@ -25,11 +25,13 @@ No test suite or linter is configured.
 
 ## Architecture
 
-Savant is a RAG (Retrieval-Augmented Generation) knowledge assistant built with Streamlit + OpenAI + FAISS.
+Savant is a RAG (Retrieval-Augmented Generation) knowledge assistant built with Streamlit + OpenAI + FAISS, with a Next.js frontend and FastAPI backend.
 
 ### Request Flow
 
-1. User submits query via Streamlit chat input
+Browser → Next.js (port 3000) → FastAPI (port 8000) → [FAISS + BM25 + OpenAI + S3]
+
+1. User submits query via Next.js chat UI (or legacy Streamlit)
 2. Query is rewritten + classified by intent (lookup vs synthesis) — `rewrite_query()` in `chat_logic.py`
 3. Hybrid retrieval (FAISS + BM25 + RRF), k=8 for lookup, k=30 for synthesis — `get_relevant_chunks()` in `vectorstore_builder.py`
 4. Cross-encoder reranking of top 10 — `rerank_chunks()` in `chat_logic.py`
@@ -54,6 +56,11 @@ Savant is a RAG (Retrieval-Augmented Generation) knowledge assistant built with 
 | `tools/analytics_dashboard.py` | Admin analytics UI (query logs, user demographics) |
 | `config.toml` | Brand, onboarding questions, assistant topics, S3 bucket names, model options |
 | `config_loader.py` | Loads `config.toml` at startup |
+| `api/main.py` | FastAPI app entry point, CORS, router registration |
+| `api/models.py` | Pydantic request/response models for all API endpoints |
+| `api/dependencies.py` | Shared singletons: OpenAI client, vectorstore loader |
+| `api/routes/` | Endpoint modules: health, query, documents, admin |
+| `web/` | Next.js frontend: query chat, knowledge map, document workspace |
 
 ### Configuration
 
@@ -112,6 +119,8 @@ Unlocked by entering `ADMIN_CODE` in the sidebar:
 - PPTX and XLSX ingestion not yet supported (Phase 6)
 - Hard auth (OAuth domain restriction) not yet built (Phase 6)
 - Audit logging not yet built (Phase 6)
+- Admin code auth is HTTP header only — replace with JWT in Phase 6
+- Next.js admin gate uses localStorage — replace with server-side auth in Phase 6
 
 ---
 
