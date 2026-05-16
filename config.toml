@@ -1,0 +1,48 @@
+[brand]
+app_name = "Savant"
+company_name = "Savant"
+page_icon = "📘"
+logo_path = "assets/savant_logo_teal.svg"
+sidebar_title = "Savant Assistant"
+sidebar_caption = "Quick answers from your organization's knowledge base."
+footer_text = "Savant • v1.0 • Powered by AI"
+primary_color = "#1B4F72"
+
+[contact]
+contact_email = "admin@savant.internal"
+feedback_url = "https://docs.google.com/forms/d/e/1FAIpQLSc31lOd_KRn9mpffhQNwuthyzh1b3KTSeMGpb12hdJQ5IT_hQ/viewform?usp=dialog"
+
+[onboarding]
+role_question = "What's your role?"
+tenure_question = "How long have you been with the company?"
+role_options = ["Manager", "Individual Contributor", "New Hire", "Other"]
+tenure_options = ["New Hire (0–30 days)", "1–6 Months", "6+ Months", "2+ Years"]
+
+[assistant]
+welcome_message = "Hi there! I'm your Knowledge Assistant. You can ask me anything about:"
+topics = ["Company policies", "Onboarding & procedures", "Tools & systems", "Processes & workflows"]
+sample_questions = [
+    "What is our onboarding process?",
+    "How do I submit a request?",
+    "Where can I find the policy on X?"
+]
+fallback_message = "I wasn't able to find a confident answer in your organization's documents. This question has been flagged as a potential documentation gap for your admin to review."
+chat_placeholder = "Ask me anything about your organization's knowledge base..."
+subtitle = "Your go-to assistant for institutional knowledge, policies, and procedures."
+
+[storage]
+s3_docs_bucket = "savant-demo-store""
+
+[compliance]
+industry = "government_contracting"
+org_size = "medium"
+certifications_pursuing = []
+compliance_frameworks = ["FAR", "DFARS", "DCAA"]
+pilot_start_date = ""
+
+[models]
+default = "gpt-4o-mini"
+options = [
+    {label = "GPT-4o mini ⚡ (Fast)", value = "gpt-4o-mini"},
+    {label = "GPT-4o (Smart)", value = "gpt-4o"}
+]
