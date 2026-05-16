@@ -41,3 +41,4 @@ query_logs.csv
 rebuild_clean.py
 test_*.py
 faiss_index/
+secrets.toml
